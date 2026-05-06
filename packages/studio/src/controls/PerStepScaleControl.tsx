@@ -4,7 +4,7 @@ import {
     type ScaleBinding,
     isResolvedToken,
 } from "@sugarcube-sh/core/client";
-import { useCurrentContext, usePathIndex, useTokenStore, useTokenStoreApi } from "../store/hooks";
+import { useCurrentContext, usePathIndex, useScaleState, useTokenStore } from "../store/hooks";
 import type { PathIndex } from "../tokens/path-index";
 
 type Dim = { value: number; unit: "rem" | "px" };
@@ -15,24 +15,24 @@ type PerStepScaleControlProps = {
 
 /**
  * Per-step inputs for a hardcoded scale: one row per token in the
- * binding's path, with min/max number inputs that write directly to
- * each token's `$value` and fluid extension. Renders alongside the
- * bulk sliders so the user has both bulk and granular editing.
+ * binding's path, with min/max number inputs. Edits route through the
+ * scale store as per-step `overrides`, so they survive bulk recomputes
+ * (the base/spread sliders skip overridden steps). Renders alongside
+ * the bulk sliders so the user has both bulk and granular editing that
+ * compose cleanly.
  */
 export function PerStepScaleControl({ binding }: PerStepScaleControlProps) {
     const pathIndex = usePathIndex();
     const resolved = useTokenStore((s) => s.resolved);
     const context = useCurrentContext();
-    const storeApi = useTokenStoreApi();
+    const setStepOverride = useScaleState((s) => s.setStepOverride);
 
     const rows = collectRows(binding.token, resolved, pathIndex, context);
     if (rows.length === 0) return null;
 
     function applyEdit(path: string, next: { min: Dim; max: Dim }) {
-        const state = storeApi.getState();
-        storeApi.setState({
-            resolved: writeFluidStep(state.resolved, pathIndex, path, context, next),
-        });
+        const stepName = path.split(".").pop() ?? path;
+        setStepOverride(binding.token, stepName, next);
     }
 
     return (
@@ -89,42 +89,6 @@ function readDims(token: ResolvedToken): { min: Dim; max: Dim } | null {
     const fluid = sugarcube?.fluid;
     if (fluid?.min && fluid.max) return { min: fluid.min, max: fluid.max };
     return { min: value, max: value };
-}
-
-function writeFluidStep(
-    resolved: ResolvedTokens,
-    pathIndex: PathIndex,
-    path: string,
-    context: string,
-    next: { min: Dim; max: Dim }
-): ResolvedTokens {
-    const entries = pathIndex.entriesFor(path).filter((e) => e.context === context);
-    const updates: ResolvedTokens = {};
-
-    for (const { key } of entries) {
-        const existing = resolved[key];
-        if (!isResolvedToken(existing)) continue;
-
-        const existingSugarcube = (existing.$extensions?.["sh.sugarcube"] ?? {}) as Record<
-            string,
-            unknown
-        >;
-
-        updates[key] = {
-            ...existing,
-            $value: next.max,
-            $resolvedValue: next.max,
-            $extensions: {
-                ...existing.$extensions,
-                "sh.sugarcube": {
-                    ...existingSugarcube,
-                    fluid: { min: next.min, max: next.max },
-                },
-            },
-        } as ResolvedTokens[string];
-    }
-
-    return { ...resolved, ...updates };
 }
 
 type PerStepRowProps = {

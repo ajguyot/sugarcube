@@ -1,36 +1,36 @@
 import type { MultiplierScaleConfig, ScaleBinding } from "@sugarcube-sh/core/client";
-import { useBaseline, useRecipeState } from "../store/hooks";
-import { selectEffective } from "../store/recipe-state";
-import { RecipeScalePreview } from "./RecipeScalePreview";
+import { useBaseline, useScaleState } from "../store/hooks";
+import { selectEffectiveScale } from "../store/scale-state";
+import { ScalePreview } from "./ScalePreview";
 import { labelForBinding } from "./resolver";
 
-type MultipliersRecipeControlProps = {
+type MultipliersScaleControlProps = {
     binding: ScaleBinding;
 };
 
 type PairsMode = "none" | "adjacent" | "custom";
 
 /**
- * Recipe controls for a multipliers scale: base size, editable list of
- * named multipliers, and a pairs toggle (none / adjacent / custom).
- * Applies edits live via the recipe-state slice; preview at the bottom
- * updates in real time.
+ * Controls for a multipliers scale extension: base size, editable list
+ * of named multipliers, and a pairs toggle (none / adjacent / custom).
+ * Edits route through `scaleState.updateScale`; preview updates live.
  */
-export function MultipliersRecipeControl({ binding }: MultipliersRecipeControlProps) {
-    const slot = useRecipeState((s) => s.slots[binding.token]);
-    const update = useRecipeState((s) => s.update);
+export function MultipliersScaleControl({ binding }: MultipliersScaleControlProps) {
+    const meta = useScaleState((s) => s.bindings[binding.token]);
+    const edit = useScaleState((s) => s.edits[binding.token]);
+    const updateScale = useScaleState((s) => s.updateScale);
     const baseline = useBaseline();
 
-    if (!slot) return null;
-    const effective = selectEffective(baseline, slot);
+    if (!meta || meta.kind !== "scale") return null;
+    const effective = selectEffectiveScale(baseline, edit, meta.parentPath);
     if (!effective || effective.mode !== "multipliers") return null;
-    const recipe = effective as MultiplierScaleConfig;
+    const scale = effective as MultiplierScaleConfig;
     const label = labelForBinding(binding);
 
-    const pairsMode = pairsToMode(recipe.pairs);
+    const pairsMode = pairsToMode(scale.pairs);
 
     return (
-        <div className="recipe-control">
+        <div className="scale-control">
             <div className="scale-row">
                 <span className="scale-label">{label} base</span>
                 <input
@@ -39,30 +39,30 @@ export function MultipliersRecipeControl({ binding }: MultipliersRecipeControlPr
                     min={0.5}
                     max={2}
                     step={0.025}
-                    value={recipe.base.max.value}
+                    value={scale.base.max.value}
                     onChange={(e) => {
                         const next = Number(e.target.value);
                         if (!Number.isFinite(next)) return;
-                        update(binding.token, (r) => ({
-                            ...r,
+                        updateScale(binding.token, (s) => ({
+                            ...s,
                             base: {
-                                min: { ...r.base.min, value: roundTo(next * 0.875, 4) },
-                                max: { ...r.base.max, value: next },
+                                min: { ...s.base.min, value: roundTo(next * 0.875, 4) },
+                                max: { ...s.base.max, value: next },
                             },
                         }));
                     }}
                     aria-label={`${label} base`}
                 />
-                <span className="scale-value">{recipe.base.max.value.toFixed(3)}</span>
+                <span className="scale-value">{scale.base.max.value.toFixed(3)}</span>
             </div>
 
-            <div className="recipe-multipliers">
+            <div className="scale-multipliers">
                 <span className="scale-label">Sizes</span>
-                {Object.entries(recipe.multipliers).map(([name, value]) => (
+                {Object.entries(scale.multipliers).map(([name, value]) => (
                     <div className="multiplier-row" key={name}>
                         <span className="multiplier-name">{name}</span>
                         <input
-                            className="recipe-number"
+                            className="scale-number"
                             type="number"
                             min={0}
                             step={0.05}
@@ -70,10 +70,10 @@ export function MultipliersRecipeControl({ binding }: MultipliersRecipeControlPr
                             onChange={(e) => {
                                 const next = Number(e.target.value);
                                 if (!Number.isFinite(next)) return;
-                                update(binding.token, (r) => ({
-                                    ...r,
+                                updateScale(binding.token, (s) => ({
+                                    ...s,
                                     multipliers: {
-                                        ...(r as MultiplierScaleConfig).multipliers,
+                                        ...(s as MultiplierScaleConfig).multipliers,
                                         [name]: next,
                                     },
                                 }));
@@ -87,12 +87,12 @@ export function MultipliersRecipeControl({ binding }: MultipliersRecipeControlPr
             <div className="scale-row">
                 <span className="scale-label">Pairs</span>
                 <select
-                    className="recipe-select"
+                    className="scale-select"
                     value={pairsMode}
                     onChange={(e) => {
                         const nextMode = e.target.value as PairsMode;
-                        update(binding.token, (r) => {
-                            const multi = r as MultiplierScaleConfig;
+                        updateScale(binding.token, (s) => {
+                            const multi = s as MultiplierScaleConfig;
                             const { pairs: _drop, ...rest } = multi;
                             if (nextMode === "none") return rest;
                             if (nextMode === "adjacent") {
@@ -109,7 +109,7 @@ export function MultipliersRecipeControl({ binding }: MultipliersRecipeControlPr
                 </select>
             </div>
 
-            <RecipeScalePreview extension={recipe} />
+            <ScalePreview extension={scale} />
         </div>
     );
 }

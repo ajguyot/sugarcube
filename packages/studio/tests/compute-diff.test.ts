@@ -1,11 +1,18 @@
 import type { ScaleExtension } from "@sugarcube-sh/core/client";
 import { describe, expect, it } from "vitest";
-import type { RecipeSlot } from "../src/store/recipe-state";
+import type { ScaleBindingMeta, ScaleEdit } from "../src/store/scale-types";
 import { computeDiff } from "../src/tokens/compute-diff";
 import { PathIndex } from "../src/tokens/path-index";
 import { resolved, snapshot, tree } from "./fixtures";
 
-const recipe = (override: Partial<ScaleExtension> = {}): ScaleExtension =>
+const sizeBindingMeta: ScaleBindingMeta = {
+    binding: { type: "scale", token: "size.step.*", base: "size.step.0" },
+    kind: "scale",
+    parentPath: "size.step",
+    sourcePath: "size.json",
+};
+
+const makeScale = (override: Partial<ScaleExtension> = {}): ScaleExtension =>
     ({
         mode: "exponential",
         viewport: { min: 320, max: 1440 },
@@ -95,19 +102,17 @@ describe("computeDiff", () => {
         expect(diff[0]?.contexts).toEqual(["light"]);
     });
 
-    describe("recipe-owned paths", () => {
-        const userEdit = recipe({ ratio: { min: 1.5, max: 1.5 } });
-        const slots: Record<string, RecipeSlot> = {
-            "size.step.*": {
-                bindingToken: "size.step.*",
-                parentPath: "size.step",
-                sourcePath: "size.json",
-                edits: userEdit,
-            },
+    describe("scale-extension-owned paths", () => {
+        const userEdit = makeScale({ ratio: { min: 1.5, max: 1.5 } });
+        const edits: Record<string, ScaleEdit> = {
+            "size.step.*": { kind: "scale", scale: userEdit },
+        };
+        const bindings: Record<string, ScaleBindingMeta> = {
+            "size.step.*": sizeBindingMeta,
         };
 
-        it("emits a group-level recipe diff when slot.edits differs from on-disk", () => {
-            const onDisk = recipe();
+        it("emits a group-level scale diff when the edit differs from on-disk", () => {
+            const onDisk = makeScale();
             const baselineMap = resolved(
                 { path: "size.step.0", value: { value: 1, unit: "rem" } },
                 { path: "size.step.1", value: { value: 1.2, unit: "rem" } }
@@ -122,7 +127,7 @@ describe("computeDiff", () => {
             });
             const pathIndex = new PathIndex(baselineMap);
 
-            const diff = computeDiff(baselineMap, baseline, pathIndex, slots);
+            const diff = computeDiff(baselineMap, baseline, pathIndex, edits, bindings);
             expect(diff).toHaveLength(1);
             expect(diff[0]).toMatchObject({
                 path: "size.step",
@@ -132,11 +137,11 @@ describe("computeDiff", () => {
             });
         });
 
-        it("suppresses leaf diffs that descend from a recipe slot", () => {
-            // The leaves changed too (because the recipe overlay was applied),
-            // but the user committed via the recipe — the diff should write
-            // the recipe back, not the 13 generated leaves.
-            const onDisk = recipe();
+        it("suppresses leaf diffs that descend from a scale-extension binding", () => {
+            // The leaves changed too (because the scale was materialized),
+            // but the user committed via the extension — the diff should
+            // write the extension back, not the 13 generated leaves.
+            const onDisk = makeScale();
             const baselineMap = resolved(
                 { path: "size.step.0", value: { value: 1, unit: "rem" } },
                 { path: "size.step.1", value: { value: 1.2, unit: "rem" } }
@@ -155,14 +160,14 @@ describe("computeDiff", () => {
             });
             const pathIndex = new PathIndex(baselineMap);
 
-            const diff = computeDiff(overlaidLeaves, baseline, pathIndex, slots);
-            // Exactly one entry — the recipe diff. No leaf entry for size.step.1.
+            const diff = computeDiff(overlaidLeaves, baseline, pathIndex, edits, bindings);
+            // Exactly one entry — the scale diff. No leaf entry for size.step.1.
             expect(diff).toHaveLength(1);
             expect(diff[0]?.path).toBe("size.step");
         });
 
-        it("emits no entry when slot.edits is null (no user edit)", () => {
-            const onDisk = recipe();
+        it("emits no entry when there's no edit for a scale binding (no user edit)", () => {
+            const onDisk = makeScale();
             const baselineMap = resolved({ path: "size.step.0", value: { value: 1, unit: "rem" } });
             const baseline = snapshot({
                 resolved: baselineMap,
@@ -174,21 +179,13 @@ describe("computeDiff", () => {
             });
             const pathIndex = new PathIndex(baselineMap);
 
-            const slotsCleared: Record<string, RecipeSlot> = {
-                "size.step.*": {
-                    bindingToken: "size.step.*",
-                    parentPath: "size.step",
-                    sourcePath: "size.json",
-                    edits: null,
-                },
-            };
-
-            expect(computeDiff(baselineMap, baseline, pathIndex, slotsCleared)).toEqual([]);
+            // No edit entry for the binding. Bindings still registered.
+            expect(computeDiff(baselineMap, baseline, pathIndex, {}, bindings)).toEqual([]);
         });
 
-        it("emits no entry when slot.edits deeply equals the on-disk recipe", () => {
+        it("emits no entry when the edit deeply equals the on-disk scale", () => {
             // After-save scenario: edits were not yet cleared but match disk.
-            const r = recipe();
+            const r = makeScale();
             const baselineMap = resolved({ path: "size.step.0", value: { value: 1, unit: "rem" } });
             const baseline = snapshot({
                 resolved: baselineMap,
@@ -200,16 +197,13 @@ describe("computeDiff", () => {
             });
             const pathIndex = new PathIndex(baselineMap);
 
-            const slotsEqualDisk: Record<string, RecipeSlot> = {
-                "size.step.*": {
-                    bindingToken: "size.step.*",
-                    parentPath: "size.step",
-                    sourcePath: "size.json",
-                    edits: r,
-                },
+            const editsEqualDisk: Record<string, ScaleEdit> = {
+                "size.step.*": { kind: "scale", scale: r },
             };
 
-            expect(computeDiff(baselineMap, baseline, pathIndex, slotsEqualDisk)).toEqual([]);
+            expect(computeDiff(baselineMap, baseline, pathIndex, editsEqualDisk, bindings)).toEqual(
+                []
+            );
         });
     });
 });

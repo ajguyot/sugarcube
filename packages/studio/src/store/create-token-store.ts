@@ -39,9 +39,9 @@ export type CreateTokenStoreResult = {
     store: TokenStoreAPI;
     pathIndex: PathIndex;
     /**
-     * Push a full resolved map. Used by scale/recipe state to commit
-     * derived overlays. Routes to the working channel (DevTools) or the
-     * local store (Embedded).
+     * Push a full resolved map. Used by scale state to commit derived
+     * values. Routes to the working channel (DevTools) or the local
+     * store (Embedded).
      */
     writeResolved: (next: ResolvedTokens) => void;
 };

@@ -20,7 +20,7 @@ export class PathIndex {
     /**
      * Rebuild the internal index against a new resolved map. The instance
      * reference is preserved - long-lived closures (store actions like
-     * `setToken`, recipe/scale apply functions) hold this reference and
+     * `setToken`, scale apply functions) hold this reference and
      * pick up the fresh internals on their next call without rebinding.
      *
      * Called by `TokenStoreProvider` when the host pushes a baseline whose

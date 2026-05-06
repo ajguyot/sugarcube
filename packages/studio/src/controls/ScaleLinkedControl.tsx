@@ -14,12 +14,13 @@ type ScaleLinkedControlProps = {
  * doesn't cover linked/follower scales yet.
  */
 export function ScaleLinkedControl({ binding }: ScaleLinkedControlProps) {
-    const slot = useScaleState((state) => state.links[binding.token]);
+    const linkMeta = useScaleState((state) => state.linkBindings[binding.token]);
+    const linkEdit = useScaleState((state) => state.links[binding.token]);
     const setLinkEnabled = useScaleState((state) => state.setLinkEnabled);
 
-    if (!slot) return null;
+    if (!linkMeta) return null;
 
-    const enabled = slot.edits?.enabled ?? true;
+    const enabled = linkEdit?.enabled ?? true;
     const label = labelForBinding(binding);
     const inputId = `studio-scale-linked-${binding.token.replace(/\./g, "-")}`;
 

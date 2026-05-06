@@ -260,13 +260,13 @@
     padding-block: 2px;
 }
 
-.recipe-preview {
+.scale-preview {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-.recipe-preview .scale-value {
+.scale-preview .scale-value {
     flex: 1;
     text-align: start;
     font-feature-settings: "tnum";
@@ -311,14 +311,14 @@
     font-family: var(--font-mono, monospace);
 }
 
-.recipe-control {
+.scale-control {
     display: flex;
     flex-direction: column;
     gap: var(--space-2xs);
 }
 
-.recipe-select,
-.recipe-number {
+.scale-select,
+.scale-number {
     flex: 1;
     background: var(--color-surface-lowered);
     border: 0;
@@ -330,12 +330,12 @@
     color: var(--color-text-normal);
 }
 
-.recipe-number {
+.scale-number {
     inline-size: 4rem;
     flex: 0 0 auto;
 }
 
-.recipe-multipliers {
+.scale-multipliers {
     display: flex;
     flex-direction: column;
     gap: 2px;

@@ -7,14 +7,12 @@ import { currentPaletteFromReference } from "../tokens/palette-discovery";
 import type { PathIndex } from "../tokens/path-index";
 import type { TokenDiffEntry, TokenSnapshot } from "../tokens/types";
 import type { TokenStoreAPI, TokenStoreState } from "./create-token-store";
-import type { RecipeStateAPI, RecipeStateStore } from "./recipe-state";
 import type { ScaleStateAPI, ScaleStateStore } from "./scale-state";
 
 export type StudioContextValue = {
     store: TokenStoreAPI;
     pathIndex: PathIndex;
     scaleState: ScaleStateAPI;
-    recipeState: RecipeStateAPI;
 };
 
 export const StudioContext = createContext<StudioContextValue | null>(null);
@@ -55,10 +53,6 @@ export function useScaleState<T>(selector: (state: ScaleStateStore) => T): T {
     return useStore(useStudio().scaleState, selector);
 }
 
-export function useRecipeState<T>(selector: (state: RecipeStateStore) => T): T {
-    return useStore(useStudio().recipeState, selector);
-}
-
 /**
  * Read + write a token by path, scoped to the current permutation.
  * Returns `[value, setValue]` like `useState`. Edits don't fan out
@@ -92,10 +86,11 @@ export function usePendingChanges(): TokenDiffEntry[] {
     const { pathIndex } = useStudio();
     const baseline = useBaseline();
     const resolved = useTokenStore((state) => state.resolved);
-    const recipeSlots = useRecipeState((state) => state.slots);
+    const edits = useScaleState((state) => state.edits);
+    const bindings = useScaleState((state) => state.bindings);
     return useMemo(
-        () => computeDiff(resolved, baseline, pathIndex, recipeSlots),
-        [resolved, baseline, pathIndex, recipeSlots]
+        () => computeDiff(resolved, baseline, pathIndex, edits, bindings),
+        [resolved, baseline, pathIndex, edits, bindings]
     );
 }
 
@@ -107,14 +102,14 @@ export function useHasPendingChange(path: string): boolean {
     return usePendingChanges().some((entry) => entry.path === path);
 }
 
-// Discard every kind of pending edit — token-store overlays and recipe edits — in one call.
+// Discard every kind of pending edit — token-store overlays and scale edits — in one call.
 export function useDiscard(): () => Promise<void> {
     const discardTokens = useTokenStore((s) => s.discard);
-    const discardRecipes = useRecipeState((s) => s.resetAll);
+    const resetScales = useScaleState((s) => s.resetAll);
     return useCallback(async () => {
-        discardRecipes();
+        resetScales();
         await discardTokens();
-    }, [discardTokens, discardRecipes]);
+    }, [discardTokens, resetScales]);
 }
 
 export function useFamilyPalette(family: string, palettes: readonly string[]): string | undefined {

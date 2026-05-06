@@ -1,10 +1,10 @@
 import type { ExponentialScaleConfig, ScaleBinding } from "@sugarcube-sh/core/client";
-import { useBaseline, useRecipeState } from "../store/hooks";
-import { selectEffective } from "../store/recipe-state";
-import { RecipeScalePreview } from "./RecipeScalePreview";
+import { useBaseline, useScaleState } from "../store/hooks";
+import { selectEffectiveScale } from "../store/scale-state";
+import { ScalePreview } from "./ScalePreview";
 import { labelForBinding } from "./resolver";
 
-type ExponentialRecipeControlProps = {
+type ExponentialScaleControlProps = {
     binding: ScaleBinding;
 };
 
@@ -21,33 +21,34 @@ const RATIO_PRESETS = [
 ];
 
 /**
- * Recipe controls for an exponential scale: ratio, base size, and step
- * counts. Applies edits live via the recipe-state slice; the preview
- * table at the bottom updates in real time.
+ * Controls for an exponential scale extension: ratio, base size, and
+ * step counts. Edits route through `scaleState.updateScale`; the preview
+ * table at the bottom updates live.
  */
-export function ExponentialRecipeControl({ binding }: ExponentialRecipeControlProps) {
-    const slot = useRecipeState((s) => s.slots[binding.token]);
-    const update = useRecipeState((s) => s.update);
+export function ExponentialScaleControl({ binding }: ExponentialScaleControlProps) {
+    const meta = useScaleState((s) => s.bindings[binding.token]);
+    const edit = useScaleState((s) => s.edits[binding.token]);
+    const updateScale = useScaleState((s) => s.updateScale);
     const baseline = useBaseline();
 
-    if (!slot) return null;
-    const effective = selectEffective(baseline, slot);
+    if (!meta || meta.kind !== "scale") return null;
+    const effective = selectEffectiveScale(baseline, edit, meta.parentPath);
     if (!effective || effective.mode !== "exponential") return null;
-    const recipe = effective as ExponentialScaleConfig;
+    const scale = effective as ExponentialScaleConfig;
     const label = labelForBinding(binding);
 
     return (
-        <div className="recipe-control">
+        <div className="scale-control">
             <div className="scale-row">
                 <span className="scale-label">{label} ratio</span>
                 <select
-                    className="recipe-select"
-                    value={String(recipe.ratio.max)}
+                    className="scale-select"
+                    value={String(scale.ratio.max)}
                     onChange={(e) => {
                         const next = Number(e.target.value);
                         if (!Number.isFinite(next)) return;
-                        update(binding.token, (r) => ({
-                            ...r,
+                        updateScale(binding.token, (s) => ({
+                            ...s,
                             ratio: { min: next, max: next },
                         }));
                     }}
@@ -69,37 +70,37 @@ export function ExponentialRecipeControl({ binding }: ExponentialRecipeControlPr
                     min={0.5}
                     max={2}
                     step={0.025}
-                    value={recipe.base.max.value}
+                    value={scale.base.max.value}
                     onChange={(e) => {
                         const next = Number(e.target.value);
                         if (!Number.isFinite(next)) return;
-                        update(binding.token, (r) => ({
-                            ...r,
+                        updateScale(binding.token, (s) => ({
+                            ...s,
                             base: {
-                                min: { ...r.base.min, value: roundTo(next * 0.95, 4) },
-                                max: { ...r.base.max, value: next },
+                                min: { ...s.base.min, value: roundTo(next * 0.95, 4) },
+                                max: { ...s.base.max, value: next },
                             },
                         }));
                     }}
                     aria-label={`${label} base`}
                 />
-                <span className="scale-value">{recipe.base.max.value.toFixed(3)}</span>
+                <span className="scale-value">{scale.base.max.value.toFixed(3)}</span>
             </div>
 
             <div className="scale-row">
                 <span className="scale-label">{label} steps up</span>
                 <input
-                    className="recipe-number"
+                    className="scale-number"
                     type="number"
                     min={0}
                     max={20}
                     step={1}
-                    value={recipe.steps.positive}
+                    value={scale.steps.positive}
                     onChange={(e) => {
                         const next = Number.parseInt(e.target.value, 10);
                         if (!Number.isFinite(next) || next < 0) return;
-                        update(binding.token, (r) => {
-                            const exp = r as ExponentialScaleConfig;
+                        updateScale(binding.token, (s) => {
+                            const exp = s as ExponentialScaleConfig;
                             return { ...exp, steps: { ...exp.steps, positive: next } };
                         });
                     }}
@@ -110,17 +111,17 @@ export function ExponentialRecipeControl({ binding }: ExponentialRecipeControlPr
             <div className="scale-row">
                 <span className="scale-label">{label} steps down</span>
                 <input
-                    className="recipe-number"
+                    className="scale-number"
                     type="number"
                     min={0}
                     max={20}
                     step={1}
-                    value={recipe.steps.negative}
+                    value={scale.steps.negative}
                     onChange={(e) => {
                         const next = Number.parseInt(e.target.value, 10);
                         if (!Number.isFinite(next) || next < 0) return;
-                        update(binding.token, (r) => {
-                            const exp = r as ExponentialScaleConfig;
+                        updateScale(binding.token, (s) => {
+                            const exp = s as ExponentialScaleConfig;
                             return { ...exp, steps: { ...exp.steps, negative: next } };
                         });
                     }}
@@ -128,7 +129,7 @@ export function ExponentialRecipeControl({ binding }: ExponentialRecipeControlPr
                 />
             </div>
 
-            <RecipeScalePreview extension={recipe} />
+            <ScalePreview extension={scale} />
         </div>
     );
 }

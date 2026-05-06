@@ -173,13 +173,16 @@ function buildStaticDimensionToken(
     } as ResolvedTokens[string];
 }
 
+export type StepOverrideMap = Record<string, { min: Dim; max: Dim }>;
+
 export function applyScaleToResolved(
     resolved: ResolvedTokens,
     scale: CapturedScale | null,
     userBase: number,
     spread: number,
     pathIndex: PathIndex,
-    context: string
+    context: string,
+    overrides?: StepOverrideMap
 ): ResolvedTokens {
     if (!scale) return resolved;
 
@@ -187,17 +190,21 @@ export function applyScaleToResolved(
     const newBaseMin = userBase * scale.baseMinRatio;
 
     for (const step of scale.steps) {
-        const adjMax = 1 + (step.maxMultiplier - 1) * spread;
-        const adjMin = 1 + (step.minMultiplier - 1) * spread;
+        const stepName = step.path.split(".").pop() ?? step.path;
+        const override = overrides?.[stepName];
 
-        const newMax: Dim = {
-            value: cleanFloat(userBase * adjMax),
-            unit: step.unit,
-        };
-        const newMin: Dim = {
-            value: cleanFloat(newBaseMin * adjMin),
-            unit: step.unit,
-        };
+        let newMax: Dim;
+        let newMin: Dim;
+        if (override) {
+            // User has pinned this step — preserve their values verbatim.
+            newMax = override.max;
+            newMin = override.min;
+        } else {
+            const adjMax = 1 + (step.maxMultiplier - 1) * spread;
+            const adjMin = 1 + (step.minMultiplier - 1) * spread;
+            newMax = { value: cleanFloat(userBase * adjMax), unit: step.unit };
+            newMin = { value: cleanFloat(newBaseMin * adjMin), unit: step.unit };
+        }
 
         const entries = pathIndex.entriesFor(step.path).filter((e) => e.context === context);
         for (const { key } of entries) {

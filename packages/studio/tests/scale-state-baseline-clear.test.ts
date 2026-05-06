@@ -1,9 +1,9 @@
 /**
  * The actual subscription behind the post-save phantom-diff fix:
- * createRecipeState wires baseline → clearAllEdits. When the host
- * pushes a new disk snapshot, every slot's pending edit is dropped.
- * If this subscription regresses, the bug we just spent three PRs
- * fixing comes back.
+ * `createScaleState` wires baseline → clearAllEdits. When the host
+ * pushes a new disk snapshot, every pending edit is dropped (scale
+ * extensions and token transforms alike). If this regresses, the bug
+ * we spent three PRs fixing comes back.
  */
 
 import type { PanelSection, ResolvedTokens, ScaleExtension } from "@sugarcube-sh/core/client";
@@ -11,12 +11,12 @@ import { describe, expect, it } from "vitest";
 import { createStore } from "zustand";
 import { createStore as createVanillaStore } from "zustand/vanilla";
 import type { TokenStoreState } from "../src/store/create-token-store";
-import { createRecipeState } from "../src/store/recipe-state";
+import { createScaleState } from "../src/store/scale-state";
 import { PathIndex } from "../src/tokens/path-index";
 import type { TokenSnapshot } from "../src/tokens/types";
 import { snapshot, tree } from "./fixtures";
 
-const recipe = (override: Partial<ScaleExtension> = {}): ScaleExtension =>
+const makeScale = (override: Partial<ScaleExtension> = {}): ScaleExtension =>
     ({
         mode: "exponential",
         viewport: { min: 320, max: 1440 },
@@ -30,13 +30,11 @@ function setup(initialBaseline: TokenSnapshot) {
     const panel: PanelSection[] = [
         {
             title: "Size",
-            bindings: [{ type: "scale", token: "size.step.*" }],
+            bindings: [{ type: "scale", token: "size.step.*", base: "size.step.0" }],
         },
     ];
     const pathIndex = new PathIndex(initialBaseline.resolved);
 
-    // Minimal token-store stand-in: only `currentContext` and `resolved`
-    // are read by createRecipeState.
     const tokenStore = createStore<TokenStoreState>(() => ({
         resolved: initialBaseline.resolved,
         css: null,
@@ -55,7 +53,7 @@ function setup(initialBaseline: TokenSnapshot) {
     const baseline = createVanillaStore<TokenSnapshot>(() => initialBaseline);
 
     const writes: ResolvedTokens[] = [];
-    const recipeState = createRecipeState(
+    const scaleState = createScaleState(
         panel,
         initialBaseline,
         pathIndex,
@@ -64,29 +62,29 @@ function setup(initialBaseline: TokenSnapshot) {
         (resolved) => writes.push(resolved)
     );
 
-    return { recipeState, baseline, writes };
+    return { scaleState, baseline, writes };
 }
 
-describe("createRecipeState — baseline subscription", () => {
-    it("clears slot.edits when the baseline emits an update", () => {
+describe("createScaleState — baseline subscription", () => {
+    it("clears scale-extension edits when the baseline emits an update", () => {
         const initial = snapshot({
             trees: [
                 tree("size.json", {
                     size: {
                         step: {
-                            $extensions: { "sh.sugarcube": { scale: recipe() } },
+                            $extensions: { "sh.sugarcube": { scale: makeScale() } },
                         },
                     },
                 }),
             ],
         });
-        const { recipeState, baseline } = setup(initial);
+        const { scaleState, baseline } = setup(initial);
 
         // Set an edit.
-        recipeState
+        scaleState
             .getState()
-            .update("size.step.*", () => recipe({ ratio: { min: 1.5, max: 1.5 } }));
-        expect(recipeState.getState().slots["size.step.*"]?.edits).not.toBeNull();
+            .updateScale("size.step.*", () => makeScale({ ratio: { min: 1.5, max: 1.5 } }));
+        expect(scaleState.getState().edits["size.step.*"]).not.toBeUndefined();
 
         // Simulate disk reload (file watcher, save, external editor edit).
         baseline.setState({
@@ -97,7 +95,7 @@ describe("createRecipeState — baseline subscription", () => {
                         step: {
                             $extensions: {
                                 "sh.sugarcube": {
-                                    scale: recipe({ ratio: { min: 1.5, max: 1.5 } }),
+                                    scale: makeScale({ ratio: { min: 1.5, max: 1.5 } }),
                                 },
                             },
                         },
@@ -107,11 +105,11 @@ describe("createRecipeState — baseline subscription", () => {
         });
 
         // Edit cleared. The post-save phantom diff is structurally impossible.
-        expect(recipeState.getState().slots["size.step.*"]?.edits).toBeNull();
+        expect(scaleState.getState().edits["size.step.*"]).toBeUndefined();
     });
 
-    it("clears edits even when baseline values change without recipe matching", () => {
-        // External edit changes a token that ISN'T owned by the recipe —
+    it("clears edits even on a no-op baseline emission", () => {
+        // External edit changes a token that ISN'T owned by the scale —
         // edits should still clear (we treat any baseline emission as
         // "external write wins"; selective preservation is out of scope).
         const initial = snapshot({
@@ -119,22 +117,22 @@ describe("createRecipeState — baseline subscription", () => {
                 tree("size.json", {
                     size: {
                         step: {
-                            $extensions: { "sh.sugarcube": { scale: recipe() } },
+                            $extensions: { "sh.sugarcube": { scale: makeScale() } },
                         },
                     },
                 }),
             ],
         });
-        const { recipeState, baseline } = setup(initial);
+        const { scaleState, baseline } = setup(initial);
 
-        recipeState
+        scaleState
             .getState()
-            .update("size.step.*", () => recipe({ ratio: { min: 1.5, max: 1.5 } }));
-        expect(recipeState.getState().slots["size.step.*"]?.edits).not.toBeNull();
+            .updateScale("size.step.*", () => makeScale({ ratio: { min: 1.5, max: 1.5 } }));
+        expect(scaleState.getState().edits["size.step.*"]).not.toBeUndefined();
 
-        // Same recipe, just a different baseline reference (a no-op disk reload).
+        // Same scale, just a different baseline reference (a no-op disk reload).
         baseline.setState({ ...initial });
 
-        expect(recipeState.getState().slots["size.step.*"]?.edits).toBeNull();
+        expect(scaleState.getState().edits["size.step.*"]).toBeUndefined();
     });
 });

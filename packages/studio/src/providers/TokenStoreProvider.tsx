@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useHost } from "../host/host-provider";
 import { createTokenStore } from "../store/create-token-store";
 import { StudioContext } from "../store/hooks";
-import { createRecipeState } from "../store/recipe-state";
 import { createScaleState } from "../store/scale-state";
 import { sameKeySet } from "../tokens/same-key-set";
 
@@ -21,21 +20,12 @@ export function TokenStoreProvider({ children }: { children: ReactNode }) {
             host.baseline,
             writeResolved
         );
-        const recipeState = createRecipeState(
-            panel,
-            initialSnapshot,
-            pathIndex,
-            store,
-            host.baseline,
-            writeResolved
-        );
 
         return {
             ctx: {
                 store,
                 pathIndex,
                 scaleState,
-                recipeState,
             },
         };
     });

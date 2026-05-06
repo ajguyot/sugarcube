@@ -16,7 +16,7 @@ export type FileEdits = {
  * path segments for each changed property.
  *
  * Most entries are leaf-token changes (`$value` and optionally a fluid
- * extension). Group-level entries (e.g. an edited scale recipe on a
+ * extension). Group-level entries (e.g. an edited scale extension on a
  * parent group) have no `$value` — only the relevant `$extensions` slot.
  */
 export function diffToFileEdits(entries: TokenDiffEntry[]): FileEdits[] {

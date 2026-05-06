@@ -2,21 +2,21 @@ import { type ScaleExtension, calculateScale } from "@sugarcube-sh/core/client";
 import type { GeneratedStep } from "@sugarcube-sh/core/client";
 import { useBaseline } from "../store/hooks";
 
-type RecipeScalePreviewProps = {
+type ScalePreviewProps = {
     extension: ScaleExtension;
 };
 
 /**
- * Read-only display of a scale recipe's generated steps. Each row shows
- * a step name and its `clamp()` output. Interactive recipe controls land
- * in a follow-up commit.
+ * Read-only display of a scale extension's generated steps. Each row
+ * shows a step name and its `clamp()` output, recomputed live from the
+ * current scale parameters.
  */
-export function RecipeScalePreview({ extension }: RecipeScalePreviewProps) {
+export function ScalePreview({ extension }: ScalePreviewProps) {
     const viewport = useBaseline().config.variables.transforms.fluid;
     const steps = calculateScale(extension);
 
     return (
-        <div className="recipe-preview">
+        <div className="scale-preview">
             {steps.map((step) => (
                 <div className="scale-row" key={step.name}>
                     <span className="scale-label">{step.name}</span>

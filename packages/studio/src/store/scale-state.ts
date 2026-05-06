@@ -1,25 +1,88 @@
-import type { PanelSection, ResolvedTokens } from "@sugarcube-sh/core/client";
+/**
+ * Scale state — the unified store for everything the user can edit on a
+ * `type: "scale"` binding. Discriminates internally between two edit
+ * kinds: `"tokens"` (hand-written scales, edited via base/spread sliders
+ * + per-step overrides) and `"scale"` (scale-extension-driven, edited
+ * via the extension's parameters).
+ *
+ * Edits are kept as a flat map keyed by binding token. Static binding
+ * metadata (kind, parentPath, sourcePath) is captured once at init and
+ * looked up at action/apply time.
+ */
+
+import type {
+    PanelSection,
+    ResolvedTokens,
+    ScaleBinding,
+    ScaleExtension,
+} from "@sugarcube-sh/core/client";
 import { type StoreApi, createStore } from "zustand";
 import type { PathIndex } from "../tokens/path-index";
+import { getScaleExtension } from "../tokens/scale-extension";
 import type { TokenSnapshot } from "../tokens/types";
 import type { TokenStoreAPI } from "./create-token-store";
-import { applyScaleOverlays } from "./scale-apply";
+import { applyScaleEdits } from "./scale-apply";
 import { DEFAULT_SPREAD, selectCapture } from "./scale-selectors";
-import type { LinkSlot, ScaleSlot } from "./scale-types";
+import type {
+    LinkBindingMeta,
+    LinkEdit,
+    ScaleBindingMeta,
+    ScaleEdit,
+    StepOverrides,
+} from "./scale-types";
 import { subscribeBaselineEditClear } from "./subscribe-baseline-edit-clear";
 
 export type ScaleStateStore = {
-    scales: Record<string, ScaleSlot>;
-    links: Record<string, LinkSlot>;
-    setBase: (binding: string, value: number) => void;
-    setSpread: (binding: string, value: number) => void;
-    setLinkEnabled: (binding: string, enabled: boolean) => void;
+    /** Active edits keyed by binding token. Absent token = no user edits yet. */
+    edits: Record<string, ScaleEdit>;
+    /** Active link toggles keyed by follower binding token. */
+    links: Record<string, LinkEdit>;
+    /** Static binding metadata keyed by binding token. */
+    bindings: Record<string, ScaleBindingMeta>;
+    /** Static link metadata keyed by follower binding token. */
+    linkBindings: Record<string, LinkBindingMeta>;
+
+    setBase: (token: string, value: number) => void;
+    setSpread: (token: string, value: number) => void;
+    setStepOverride: (
+        token: string,
+        step: string,
+        value: { min: { value: number; unit: string }; max: { value: number; unit: string } }
+    ) => void;
+    clearStepOverride: (token: string, step: string) => void;
+    updateScale: (token: string, updater: (scale: ScaleExtension) => ScaleExtension) => void;
+    setLinkEnabled: (token: string, enabled: boolean) => void;
     resetAll: () => void;
 };
 
 export type ScaleStateAPI = StoreApi<ScaleStateStore>;
 
 export type ScaleWriteCallback = (resolved: ResolvedTokens) => void;
+
+/**
+ * Read the on-disk scale extension for a scale-kind binding. Always
+ * reads from the *live* baseline so post-save phantom diffs are
+ * structurally impossible — once disk updates, "original" tracks it.
+ */
+export function selectOriginalScale(
+    baseline: TokenSnapshot,
+    parentPath: string
+): ScaleExtension | null {
+    return getScaleExtension(baseline.trees, parentPath) ?? null;
+}
+
+/**
+ * Read the scale extension currently in effect: user's edit if present,
+ * otherwise the live on-disk original.
+ */
+export function selectEffectiveScale(
+    baseline: TokenSnapshot,
+    edit: ScaleEdit | undefined,
+    parentPath: string
+): ScaleExtension | null {
+    if (edit?.kind === "scale") return edit.scale;
+    return selectOriginalScale(baseline, parentPath);
+}
 
 export function createScaleState(
     panelSections: PanelSection[],
@@ -32,81 +95,122 @@ export function createScaleState(
     const writeResolved: ScaleWriteCallback =
         onWrite ?? ((resolved) => tokenStore.setState({ resolved }));
 
-    const effectiveSpread = (edits: ScaleSlot["edits"]) => edits?.spread ?? DEFAULT_SPREAD;
-    const effectiveBase = (slot: ScaleSlot, context: string): number =>
-        slot.edits?.base ??
-        selectCapture(baseline.getState(), pathIndex, slot.binding, context)?.baseMax ??
-        0;
+    const { bindings, linkBindings } = collectBindings(panelSections, snapshot);
 
-    const { scales, links } = buildSlots(panelSections);
+    const effectiveBase = (token: string, edit: ScaleEdit | undefined, context: string): number => {
+        if (edit?.kind === "tokens" && edit.base !== undefined) return edit.base;
+        const meta = bindings[token];
+        if (!meta) return 0;
+        return selectCapture(baseline.getState(), pathIndex, meta.binding, context)?.baseMax ?? 0;
+    };
 
     const scaleStore = createStore<ScaleStateStore>((set) => ({
-        scales,
-        links,
+        edits: {},
+        links: {},
+        bindings,
+        linkBindings,
 
-        setBase: (binding, value) => {
+        setBase: (token, value) => {
+            set((state) => ({
+                edits: {
+                    ...state.edits,
+                    [token]: nextTokensEdit(state.edits[token], { base: value }),
+                },
+            }));
+            applyAll();
+        },
+
+        setSpread: (token, value) => {
+            const context = tokenStore.getState().currentContext;
             set((state) => {
-                const slot = state.scales[binding];
-                if (!slot) return state;
+                const existing = state.edits[token];
+                const fallbackBase = effectiveBase(token, existing, context);
                 return {
-                    scales: {
-                        ...state.scales,
-                        [binding]: {
-                            ...slot,
-                            edits: { base: value, spread: effectiveSpread(slot.edits) },
-                        },
+                    edits: {
+                        ...state.edits,
+                        [token]: nextTokensEdit(existing, {
+                            base:
+                                existing?.kind === "tokens"
+                                    ? (existing.base ?? fallbackBase)
+                                    : fallbackBase,
+                            spread: value,
+                        }),
                     },
                 };
             });
             applyAll();
         },
 
-        setSpread: (binding, value) => {
+        setStepOverride: (token, step, value) => {
             set((state) => {
-                const slot = state.scales[binding];
-                if (!slot) return state;
+                const existing = state.edits[token];
+                const overrides = existing?.kind === "tokens" ? (existing.overrides ?? {}) : {};
                 return {
-                    scales: {
-                        ...state.scales,
-                        [binding]: {
-                            ...slot,
-                            edits: {
-                                base: effectiveBase(slot, tokenStore.getState().currentContext),
-                                spread: value,
-                            },
-                        },
+                    edits: {
+                        ...state.edits,
+                        [token]: nextTokensEdit(existing, {
+                            overrides: { ...overrides, [step]: value },
+                        }),
                     },
                 };
             });
             applyAll();
         },
 
-        setLinkEnabled: (binding, enabled) => {
+        clearStepOverride: (token, step) => {
             set((state) => {
-                const slot = state.links[binding];
-                if (!slot) return state;
+                const existing = state.edits[token];
+                if (existing?.kind !== "tokens" || !existing.overrides) return state;
+                const { [step]: _removed, ...rest } = existing.overrides;
+                const nextOverrides = Object.keys(rest).length > 0 ? rest : undefined;
                 return {
-                    links: { ...state.links, [binding]: { ...slot, edits: { enabled } } },
+                    edits: {
+                        ...state.edits,
+                        [token]: nextTokensEdit(existing, { overrides: nextOverrides }),
+                    },
                 };
             });
+            applyAll();
+        },
+
+        updateScale: (token, updater) => {
+            const meta = bindings[token];
+            if (!meta || meta.kind !== "scale") return;
+            const existing = scaleStore.getState().edits[token];
+            const current =
+                existing?.kind === "scale"
+                    ? existing.scale
+                    : selectOriginalScale(baseline.getState(), meta.parentPath);
+            if (!current) return;
+            const next = updater(current);
+            set((state) => ({
+                edits: { ...state.edits, [token]: { kind: "scale", scale: next } },
+            }));
+            applyAll();
+        },
+
+        setLinkEnabled: (token, enabled) => {
+            set((state) => ({
+                links: { ...state.links, [token]: { enabled } },
+            }));
             applyAll();
         },
 
         resetAll: () => {
-            set((state) => ({
-                scales: clearEdits(state.scales),
-                links: clearEdits(state.links),
-            }));
+            set(() => ({ edits: {}, links: {} }));
+            applyAll();
         },
     }));
 
     function applyAll() {
-        const { scales: currentScales, links: currentLinks } = scaleStore.getState();
+        const { edits, links } = scaleStore.getState();
         const { resolved, currentContext } = tokenStore.getState();
-        const next = applyScaleOverlays(
+        const next = applyScaleEdits(
             resolved,
-            currentScales,
-            currentLinks,
+            edits,
+            links,
+            bindings,
+            linkBindings,
             baseline.getState(),
             pathIndex,
             currentContext
@@ -121,45 +225,101 @@ export function createScaleState(
     });
 
     subscribeBaselineEditClear(baseline, () => {
-        scaleStore.setState((state) => ({
-            scales: clearEdits(state.scales),
-            links: clearEdits(state.links),
-        }));
+        scaleStore.setState(() => ({ edits: {}, links: {} }));
     });
 
     return scaleStore;
 }
 
-function buildSlots(panelSections: PanelSection[]): {
-    scales: Record<string, ScaleSlot>;
-    links: Record<string, LinkSlot>;
+function nextTokensEdit(
+    existing: ScaleEdit | undefined,
+    patch: {
+        base?: number;
+        spread?: number;
+        overrides?: StepOverrides | undefined;
+    }
+): ScaleEdit {
+    if (existing?.kind === "tokens") {
+        return {
+            kind: "tokens",
+            base: patch.base ?? existing.base,
+            spread: patch.spread ?? existing.spread,
+            overrides: "overrides" in patch ? patch.overrides : existing.overrides,
+        };
+    }
+    // No prior edit (or wrong kind — shouldn't happen for valid binding).
+    return {
+        kind: "tokens",
+        base: patch.base,
+        spread: patch.spread ?? DEFAULT_SPREAD,
+        overrides: patch.overrides,
+    };
+}
+
+function collectBindings(
+    panelSections: PanelSection[],
+    snapshot: TokenSnapshot
+): {
+    bindings: Record<string, ScaleBindingMeta>;
+    linkBindings: Record<string, LinkBindingMeta>;
 } {
-    const scales: Record<string, ScaleSlot> = {};
-    const linkBindings: Array<{ token: string; sourceBinding: string }> = [];
+    const bindings: Record<string, ScaleBindingMeta> = {};
+    const linkBindings: Record<string, LinkBindingMeta> = {};
 
     for (const section of panelSections) {
         for (const binding of section.bindings) {
             if (binding.type === "scale" && binding.base) {
-                scales[binding.token] = { binding, edits: null };
+                bindings[binding.token] = buildScaleBindingMeta(binding, snapshot);
             } else if (binding.type === "scale-linked") {
-                linkBindings.push({ token: binding.token, sourceBinding: binding.scalesWith });
+                linkBindings[binding.token] = {
+                    bindingToken: binding.token,
+                    sourceBinding: binding.scalesWith,
+                };
             }
         }
     }
 
-    const links: Record<string, LinkSlot> = {};
-    for (const { token, sourceBinding } of linkBindings) {
-        if (!scales[sourceBinding]) continue;
-        links[token] = { bindingToken: token, sourceBinding, edits: null };
+    // Drop link bindings whose source binding wasn't registered.
+    for (const token of Object.keys(linkBindings)) {
+        const link = linkBindings[token];
+        if (!link || !bindings[link.sourceBinding]) {
+            delete linkBindings[token];
+        }
     }
 
-    return { scales, links };
+    return { bindings, linkBindings };
 }
 
-function clearEdits<T extends { edits: unknown }>(slots: Record<string, T>): Record<string, T> {
-    return Object.fromEntries(
-        Object.entries(slots).map(([key, slot]) => [key, { ...slot, edits: null }])
-    );
+function buildScaleBindingMeta(binding: ScaleBinding, snapshot: TokenSnapshot): ScaleBindingMeta {
+    const parentPath = stripTrailingGlob(binding.token);
+    const onDiskScale = getScaleExtension(snapshot.trees, parentPath);
+    return {
+        binding,
+        kind: onDiskScale ? "scale" : "tokens",
+        parentPath,
+        sourcePath: findSourcePath(snapshot, parentPath),
+    };
+}
+
+function stripTrailingGlob(pattern: string): string {
+    return pattern.endsWith(".*") ? pattern.slice(0, -2) : pattern;
+}
+
+function findSourcePath(snapshot: TokenSnapshot, parentPath: string): string {
+    const segments = parentPath.split(".");
+    for (const tree of snapshot.trees) {
+        let node: unknown = tree.tokens;
+        let found = true;
+        for (const segment of segments) {
+            if (!node || typeof node !== "object") {
+                found = false;
+                break;
+            }
+            node = (node as Record<string, unknown>)[segment];
+        }
+        if (found && node && typeof node === "object") return tree.sourcePath;
+    }
+    return snapshot.trees[0]?.sourcePath ?? "";
 }
 
 export type { CapturedLinkedScale, CapturedScale } from "../tokens/scale-cascade";

@@ -8,28 +8,30 @@ type DirectScaleControlProps = {
 };
 
 /**
- * Edits a hardcoded scale (concrete fluid tokens, no recipe) with two
- * sliders: a base value that anchors the scale, and a spread factor that
- * compresses or amplifies the gaps between steps.
+ * Edits a hand-written scale (concrete fluid tokens, no scale extension)
+ * with two sliders: a base value that anchors the scale, and a spread
+ * factor that compresses or amplifies the gaps between steps.
  *
  * Capture (slider min/max) is derived from the live baseline per render —
  * an external file edit shifts the slider range to track the new disk values.
  */
 export function DirectScaleControl({ binding }: DirectScaleControlProps) {
-    const slot = useScaleState((state) => state.scales[binding.token]);
+    const meta = useScaleState((state) => state.bindings[binding.token]);
+    const edit = useScaleState((state) => state.edits[binding.token]);
     const setBase = useScaleState((state) => state.setBase);
     const setSpread = useScaleState((state) => state.setSpread);
     const baseline = useBaseline();
     const pathIndex = usePathIndex();
     const context = useCurrentContext();
 
-    if (!slot) return null;
+    if (!meta || meta.kind !== "tokens") return null;
 
     const captured = selectCapture(baseline, pathIndex, binding, context);
     if (!captured) return null;
 
-    const base = slot.edits?.base ?? captured.baseMax;
-    const spread = slot.edits?.spread ?? DEFAULT_SPREAD;
+    const tokensEdit = edit?.kind === "tokens" ? edit : null;
+    const base = tokensEdit?.base ?? captured.baseMax;
+    const spread = tokensEdit?.spread ?? DEFAULT_SPREAD;
 
     const label = labelForBinding(binding);
     const baseLabel = `${label} base`;

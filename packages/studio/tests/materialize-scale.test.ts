@@ -1,16 +1,16 @@
 /**
- * Verifies that the recipe overlay produces the dimension tokens for
- * each calculated step and merges them into the resolved map without
- * touching unrelated entries.
+ * Verifies that materializing a scale extension produces the dimension
+ * tokens for each calculated step and merges them into the resolved map
+ * without touching unrelated entries.
  */
 
 import type { ScaleExtension } from "@sugarcube-sh/core/client";
 import { describe, expect, it } from "vitest";
-import { applyRecipeOverlay } from "../src/store/recipe-apply";
+import { materializeScale } from "../src/store/scale-apply";
 import { PathIndex } from "../src/tokens/path-index";
 import { resolved } from "./fixtures";
 
-const recipe: ScaleExtension = {
+const scale: ScaleExtension = {
     mode: "exponential",
     base: {
         min: { value: 1, unit: "rem" },
@@ -20,7 +20,7 @@ const recipe: ScaleExtension = {
     steps: { negative: 0, positive: 2 },
 };
 
-describe("applyRecipeOverlay", () => {
+describe("materializeScale", () => {
     it("writes calculated min/max into each step's fluid extension", () => {
         const before = resolved(
             { path: "size.step.0", value: { value: 0, unit: "rem" } },
@@ -29,7 +29,7 @@ describe("applyRecipeOverlay", () => {
         );
         const pathIndex = new PathIndex(before);
 
-        const after = applyRecipeOverlay(before, recipe, "size.step", pathIndex, "default");
+        const after = materializeScale(before, scale, "size.step", pathIndex, "default");
 
         const step0 = after["default::size.step.0"] as {
             $value: { value: number; unit: string };
@@ -53,7 +53,7 @@ describe("applyRecipeOverlay", () => {
         );
         const pathIndex = new PathIndex(before);
 
-        const after = applyRecipeOverlay(before, recipe, "size.step", pathIndex, "light");
+        const after = materializeScale(before, scale, "size.step", pathIndex, "light");
 
         expect((after["light::size.step.0"] as { $value: { value: number } }).$value.value).toBe(1);
         // dark untouched
@@ -67,7 +67,7 @@ describe("applyRecipeOverlay", () => {
         );
         const pathIndex = new PathIndex(before);
 
-        const after = applyRecipeOverlay(before, recipe, "size.step", pathIndex, "default");
+        const after = materializeScale(before, scale, "size.step", pathIndex, "default");
 
         expect((after["default::color.bg"] as { $value: unknown }).$value).toBe("#fff");
     });
@@ -76,17 +76,17 @@ describe("applyRecipeOverlay", () => {
         const before = resolved({ path: "size.step.0", value: { value: 0, unit: "rem" } });
         const pathIndex = new PathIndex(before);
 
-        const after = applyRecipeOverlay(before, recipe, "size.step", pathIndex, "default");
+        const after = materializeScale(before, scale, "size.step", pathIndex, "default");
 
         expect(after).not.toBe(before);
     });
 
     it("skips step paths that don't exist in the resolved map", () => {
-        // Recipe wants steps 0..2 but only 0 exists in resolved.
+        // Scale wants steps 0..2 but only 0 exists in resolved.
         const before = resolved({ path: "size.step.0", value: { value: 0, unit: "rem" } });
         const pathIndex = new PathIndex(before);
 
-        const after = applyRecipeOverlay(before, recipe, "size.step", pathIndex, "default");
+        const after = materializeScale(before, scale, "size.step", pathIndex, "default");
 
         expect(Object.keys(after)).toEqual(["default::size.step.0"]);
     });
