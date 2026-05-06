@@ -5,12 +5,11 @@ import { StudioContext } from "../store/hooks";
 import { createRecipeState } from "../store/recipe-state";
 import { createScaleState } from "../store/scale-state";
 import { sameKeySet } from "../tokens/same-key-set";
-import { EmbeddedCSSBridge, EmbeddedPipelineRunner } from "./embedded-pipeline";
 
 export function TokenStoreProvider({ children }: { children: ReactNode }) {
     const host = useHost();
 
-    const [{ ctx, initialSnapshot }] = useState(() => {
+    const [{ ctx }] = useState(() => {
         const initialSnapshot = host.baseline.getState();
         const { store, pathIndex, writeResolved } = createTokenStore(host);
         const panel = initialSnapshot.config.studio?.panel ?? [];
@@ -32,7 +31,6 @@ export function TokenStoreProvider({ children }: { children: ReactNode }) {
         );
 
         return {
-            initialSnapshot,
             ctx: {
                 store,
                 pathIndex,
@@ -41,6 +39,22 @@ export function TokenStoreProvider({ children }: { children: ReactNode }) {
             },
         };
     });
+
+    // Let the host attach mode-specific runtime machinery (e.g. the
+    // in-browser pipeline + CSS bridge for embedded mode). Cleanup runs
+    // on host change or unmount.
+    useEffect(() => host.attach?.(ctx.store), [host, ctx.store]);
+
+    // Mirror host working-channel updates into the store. DevTools pushes
+    // here on disk changes / external edits. Embedded has no working
+    // channel, so the effect short-circuits. Subscription tears down on
+    // host change or unmount.
+    useEffect(() => {
+        if (!host.working) return;
+        return host.working.subscribe((resolved) => {
+            ctx.store.setState({ resolved });
+        });
+    }, [host.working, ctx.store]);
 
     // When the host pushes a baseline whose key set has changed (e.g. an
     // externally-added or -removed token), refresh the PathIndex in place.
@@ -55,11 +69,5 @@ export function TokenStoreProvider({ children }: { children: ReactNode }) {
         });
     }, [host.baseline, ctx.pathIndex]);
 
-    return (
-        <StudioContext.Provider value={ctx}>
-            {!host.working && <EmbeddedPipelineRunner snapshot={initialSnapshot} />}
-            {!host.working && <EmbeddedCSSBridge />}
-            {children}
-        </StudioContext.Provider>
-    );
+    return <StudioContext.Provider value={ctx}>{children}</StudioContext.Provider>;
 }

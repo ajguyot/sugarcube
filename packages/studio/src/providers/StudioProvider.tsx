@@ -13,58 +13,65 @@ import type { Host } from "../host/types";
 import { TokenStoreProvider } from "./TokenStoreProvider";
 import type { TokenSource } from "./token-source";
 
-export { useStudioConfig } from "../store/hooks";
-
 type Props = {
     source: TokenSource;
     children: ReactNode;
 };
 
+type HostState =
+    | { kind: "loading" }
+    | { kind: "error"; message: string }
+    | { kind: "ready"; host: Host };
+
 export function StudioProvider({ source, children }: Props) {
-    const [host, setHost] = useState<Host | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [state, setState] = useState<HostState>({ kind: "loading" });
 
     useEffect(() => {
+        setState({ kind: "loading" });
         const controller = new AbortController();
 
-        const promise =
-            source.mode === "devtools"
-                ? createDevToolsHost(controller.signal)
-                : createEmbeddedHost(controller.signal);
+        async function init() {
+            try {
+                const host =
+                    source.mode === "devtools"
+                        ? await createDevToolsHost(controller.signal)
+                        : await createEmbeddedHost(controller.signal);
 
-        promise
-            .then((h) => {
-                if (!controller.signal.aborted) setHost(h);
-            })
-            .catch((err) => {
+                if (!controller.signal.aborted) setState({ kind: "ready", host });
+            } catch (err) {
                 if (err instanceof DOMException && err.name === "AbortError") return;
-                setError(err instanceof Error ? err.message : "Failed to connect");
-            });
+                setState({
+                    kind: "error",
+                    message: err instanceof Error ? err.message : "Failed to connect",
+                });
+            }
+        }
 
+        init();
         return () => controller.abort();
     }, [source.mode]);
 
-    if (error) {
+    if (state.kind === "error") {
         return (
             <div className="studio-error">
                 <p>Failed to connect to the dev server.</p>
                 <p>Make sure your Vite dev server is running and try reloading.</p>
                 <details>
                     <summary>Details</summary>
-                    <pre>{error}</pre>
+                    <pre>{state.message}</pre>
                 </details>
             </div>
         );
     }
 
-    if (!host) {
+    if (state.kind === "loading") {
         return (
             <div>{source.mode === "devtools" ? "Loading Studio..." : "Waiting for host..."}</div>
         );
     }
 
     return (
-        <HostProvider host={host}>
+        <HostProvider host={state.host}>
             <TokenStoreProvider>{children}</TokenStoreProvider>
         </HostProvider>
     );

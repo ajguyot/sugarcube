@@ -105,11 +105,5 @@ export function createTokenStore(host: Host): CreateTokenStoreResult {
         },
     }));
 
-    if (host.working) {
-        host.working.subscribe((resolved) => {
-            store.setState({ resolved });
-        });
-    }
-
     return { store, pathIndex, writeResolved };
 }

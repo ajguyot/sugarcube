@@ -5,7 +5,7 @@
  * Waits for the host page's `studio:init` postMessage, then returns a
  * Host whose baseline is the received snapshot. There is no working
  * channel — edits stay in the SPA's stores until save, and the in-browser
- * pipeline (EmbeddedPipelineRunner) generates CSS for the host page.
+ * pipeline (attached via `attach()`) generates CSS for the host page.
  *
  * Save round-trips via postMessage: posts `studio:save` with a request id
  * and waits for `studio:save-result` carrying the matching id and the
@@ -18,21 +18,36 @@
 
 import { createStore } from "zustand/vanilla";
 import type { TokenSnapshot } from "../tokens/types";
+import { attachEmbeddedPipeline } from "./embedded-pipeline";
 import type { Host, SaveBundle, SaveResult } from "./types";
+
+const SAVE_TIMEOUT_MS = 30_000;
 
 export function createEmbeddedHost(signal: AbortSignal): Promise<Host> {
     return new Promise((resolve, reject) => {
+        if (signal.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+
         function listener(event: MessageEvent) {
             const data = event.data;
             if (!data || typeof data !== "object") return;
             if (data.type !== "studio:init" || !isTokenSnapshot(data.snapshot)) return;
             cleanup();
 
-            const baseline = createStore<TokenSnapshot>(() => data.snapshot);
+            if (signal.aborted) {
+                reject(new DOMException("Aborted", "AbortError"));
+                return;
+            }
+
+            const snapshot: TokenSnapshot = data.snapshot;
+            const baseline = createStore<TokenSnapshot>(() => snapshot);
 
             resolve({
                 baseline,
                 working: undefined,
+                attach: (store) => attachEmbeddedPipeline(store, snapshot),
                 save: embeddedSave,
                 discard: async () => {},
                 capabilities: {
@@ -56,7 +71,7 @@ export function createEmbeddedHost(signal: AbortSignal): Promise<Host> {
         window.addEventListener("message", listener);
         signal.addEventListener("abort", onAbort);
 
-        // TODO: We should only allow messages from the same origin.
+        // TODO.
         window.parent.postMessage({ type: "studio:ready" }, "*");
     });
 }
@@ -72,7 +87,7 @@ function embeddedSave(bundle: SaveBundle): Promise<SaveResult> {
             if (!data || typeof data !== "object") return;
             if (data.type !== "studio:save-result") return;
             if (data.requestId !== requestId) return;
-            window.removeEventListener("message", handler);
+            cleanup();
 
             if (typeof data.error === "string") {
                 resolve({ kind: "failed", error: data.error });
@@ -82,6 +97,16 @@ function embeddedSave(bundle: SaveBundle): Promise<SaveResult> {
                 resolve({ kind: "failed", error: "Malformed save result from host" });
             }
         }
+
+        function cleanup() {
+            window.removeEventListener("message", handler);
+            clearTimeout(timer);
+        }
+
+        const timer = setTimeout(() => {
+            cleanup();
+            resolve({ kind: "failed", error: "Save timed out: host did not respond" });
+        }, SAVE_TIMEOUT_MS);
 
         window.addEventListener("message", handler);
         window.parent.postMessage(

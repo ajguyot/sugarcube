@@ -67,6 +67,11 @@ function waitForSharedStates(
     signal: AbortSignal
 ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+        if (signal.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+        }
+
         const isReady = () => {
             const disk = diskState.value();
             return Boolean(
@@ -79,28 +84,32 @@ function waitForSharedStates(
             return;
         }
 
-        const check = () => {
+        function check() {
             if (!isReady()) return;
+            cleanup();
+            resolve();
+        }
+
+        function onAbort() {
+            cleanup();
+            reject(new DOMException("Aborted", "AbortError"));
+        }
+
+        function onTimeout() {
+            cleanup();
+            reject(new Error("Timed out waiting for shared state"));
+        }
+
+        function cleanup() {
             unsubDisk();
             unsubWorking();
             clearTimeout(timer);
-            resolve();
-        };
+            signal.removeEventListener("abort", onAbort);
+        }
 
         const unsubDisk = diskState.on("updated", check);
         const unsubWorking = workingState.on("updated", check);
-
-        const timer = setTimeout(() => {
-            unsubDisk();
-            unsubWorking();
-            reject(new Error("Timed out waiting for shared state"));
-        }, INIT_TIMEOUT_MS);
-
-        signal.addEventListener("abort", () => {
-            unsubDisk();
-            unsubWorking();
-            clearTimeout(timer);
-            reject(new DOMException("Aborted", "AbortError"));
-        });
+        const timer = setTimeout(onTimeout, INIT_TIMEOUT_MS);
+        signal.addEventListener("abort", onAbort);
     });
 }

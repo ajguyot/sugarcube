@@ -1,9 +1,6 @@
 import type { InternalConfig, ResolvedTokens, TokenTree } from "@sugarcube-sh/core/client";
 
 export type TokenSnapshot = {
-    formatVersion: number;
-    generatedAt: string;
-    sourceConfigPath: string;
     config: InternalConfig;
     trees: TokenTree[];
     resolved: ResolvedTokens;

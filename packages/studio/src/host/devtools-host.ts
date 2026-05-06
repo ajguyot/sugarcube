@@ -5,41 +5,25 @@ import type { TokenSnapshot } from "../tokens/types";
 import { type InitData, fetchInitData } from "./devtools-init";
 import type { Host } from "./types";
 
-/**
- * Build a DevTools Host. Subscribes to the disk channel so every disk
- * emission rebuilds the baseline snapshot. Downstream consumers
- * (computeDiff, recipe selectors, scale captures) see the new on-disk
- * state without needing to remount.
- */
 export async function createDevToolsHost(signal: AbortSignal): Promise<Host> {
     const initData = await fetchInitData(signal);
 
-    const buildSnapshot = (
-        config: InternalConfig,
-        trees: TokenTree[],
-        resolved: ResolvedTokens
-    ): TokenSnapshot => ({
-        formatVersion: 1,
-        generatedAt: "",
-        sourceConfigPath: "",
-        config,
-        trees,
-        resolved,
-    });
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
 
-    const baseline = createStore<TokenSnapshot>(() =>
-        buildSnapshot(initData.config, initData.trees, initData.diskResolved)
-    );
+    const baseline = createStore<TokenSnapshot>(() => ({
+        config: initData.config,
+        trees: initData.trees,
+        resolved: initData.diskResolved,
+    }));
 
-    initData.diskState.on("updated", (next) => {
-        baseline.setState(
-            buildSnapshot(
-                next.config as InternalConfig,
-                next.trees as TokenTree[],
-                next.resolved as ResolvedTokens
-            )
-        );
+    const unsubDisk = initData.diskState.on("updated", (next) => {
+        baseline.setState({
+            config: next.config as InternalConfig,
+            trees: next.trees as TokenTree[],
+            resolved: next.resolved as ResolvedTokens,
+        });
     });
+    signal.addEventListener("abort", unsubDisk);
 
     return {
         baseline,

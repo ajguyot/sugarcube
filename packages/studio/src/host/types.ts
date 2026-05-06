@@ -12,6 +12,7 @@
 
 import type { ResolvedTokens } from "@sugarcube-sh/core/client";
 import type { StoreApi } from "zustand";
+import type { TokenStoreAPI } from "../store/create-token-store";
 import type { FileEdits } from "../tokens/diff-to-edits";
 import type { TokenSnapshot } from "../tokens/types";
 
@@ -31,6 +32,15 @@ export interface Host {
      * until save and the SPA runs the pipeline in-browser.
      */
     working?: WorkingChannel;
+
+    /**
+     * Optional hook for the host to attach mode-specific runtime
+     * machinery to the token store. Embedded uses this to run the
+     * pipeline in-browser and post the generated CSS to the parent
+     * window. Returns a cleanup function for teardown. DevTools doesn't
+     * implement it — the server runs the pipeline and HMR delivers CSS.
+     */
+    attach?(store: TokenStoreAPI): () => void;
 
     /**
      * Persist the diff. Return value is host-specific via the discriminated

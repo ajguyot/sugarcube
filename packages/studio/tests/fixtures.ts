@@ -60,9 +60,6 @@ type SnapshotFixture = {
 /** Build a minimal TokenSnapshot — config is stubbed; selectors that touch it should pass an explicit one. */
 export function snapshot(s: SnapshotFixture = {}): TokenSnapshot {
     return {
-        formatVersion: 1,
-        generatedAt: "",
-        sourceConfigPath: "",
         config: {} as TokenSnapshot["config"],
         trees: s.trees ?? [],
         resolved: s.resolved ?? {},
