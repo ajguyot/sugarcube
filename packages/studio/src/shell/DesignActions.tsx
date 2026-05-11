@@ -1,5 +1,4 @@
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import { useCallback } from "react";
 import { useHost } from "../host/host-provider";
 import { useDiscard, usePendingChanges, usePendingChangesCount } from "../store/hooks";
 import { useSave } from "./use-save";
@@ -11,16 +10,16 @@ type DesignActionsProps = {
 };
 
 export function DesignActions({ diffOpen, onToggleDiff, diffPanelId }: DesignActionsProps) {
-    const host = useHost();
+    const { discardLabel } = useHost().capabilities;
     const pendingCount = usePendingChangesCount();
     const diff = usePendingChanges();
     const discard = useDiscard();
-    const save = useSave(diff);
+    const { saving, label, feedback, onSave, reset: resetSave } = useSave(diff);
 
-    const handleDiscard = useCallback(async () => {
-        save.reset();
+    const handleDiscard = async () => {
+        resetSave();
         await discard();
-    }, [save, discard]);
+    };
 
     const changesLabel = `${pendingCount} ${pendingCount === 1 ? "change" : "changes"}`;
 
@@ -38,19 +37,14 @@ export function DesignActions({ diffOpen, onToggleDiff, diffPanelId }: DesignAct
             <button
                 type="button"
                 onClick={handleDiscard}
-                aria-label={`${host.capabilities.discardLabel} all pending design changes`}
+                aria-label={`${discardLabel} all pending design changes`}
             >
-                {host.capabilities.discardLabel}
+                {discardLabel}
             </button>
-            <button
-                type="button"
-                onClick={save.onSave}
-                disabled={save.saving}
-                aria-label={save.label}
-            >
-                {save.label}
+            <button type="button" onClick={onSave} disabled={saving}>
+                {label}
             </button>
-            {save.feedback}
+            {feedback}
         </div>
     );
 }
