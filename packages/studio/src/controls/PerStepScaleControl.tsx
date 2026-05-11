@@ -13,14 +13,6 @@ type PerStepScaleControlProps = {
     binding: ScaleBinding;
 };
 
-/**
- * Per-step inputs for a hardcoded scale: one row per token in the
- * binding's path, with min/max number inputs. Edits route through the
- * scale store as per-step `overrides`, so they survive bulk recomputes
- * (the base/spread sliders skip overridden steps). Renders alongside
- * the bulk sliders so the user has both bulk and granular editing that
- * compose cleanly.
- */
 export function PerStepScaleControl({ binding }: PerStepScaleControlProps) {
     const pathIndex = usePathIndex();
     const resolved = useTokenStore((s) => s.resolved);

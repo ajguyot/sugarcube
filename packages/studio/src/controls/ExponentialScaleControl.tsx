@@ -1,4 +1,4 @@
-import type { ExponentialScaleConfig, ScaleBinding } from "@sugarcube-sh/core/client";
+import { type ExponentialScaleConfig, type ScaleBinding, roundTo } from "@sugarcube-sh/core/client";
 import { useBaseline, useScaleState } from "../store/hooks";
 import { selectEffectiveScale } from "../store/scale-state";
 import { ScalePreview } from "./ScalePreview";
@@ -20,11 +20,6 @@ const RATIO_PRESETS = [
     { label: "Golden Ratio (1.618)", value: 1.618 },
 ];
 
-/**
- * Controls for an exponential scale extension: ratio, base size, and
- * step counts. Edits route through `scaleState.updateScale`; the preview
- * table at the bottom updates live.
- */
 export function ExponentialScaleControl({ binding }: ExponentialScaleControlProps) {
     const meta = useScaleState((s) => s.bindings[binding.token]);
     const edit = useScaleState((s) => s.edits[binding.token]);
@@ -34,7 +29,7 @@ export function ExponentialScaleControl({ binding }: ExponentialScaleControlProp
     if (!meta || meta.kind !== "scale") return null;
     const effective = selectEffectiveScale(baseline, edit, meta.parentPath);
     if (!effective || effective.mode !== "exponential") return null;
-    const scale = effective as ExponentialScaleConfig;
+    const scale: ExponentialScaleConfig = effective;
     const label = labelForBinding(binding);
 
     return (
@@ -74,13 +69,17 @@ export function ExponentialScaleControl({ binding }: ExponentialScaleControlProp
                     onChange={(e) => {
                         const next = Number(e.target.value);
                         if (!Number.isFinite(next)) return;
-                        updateScale(binding.token, (s) => ({
-                            ...s,
-                            base: {
-                                min: { ...s.base.min, value: roundTo(next * 0.95, 4) },
-                                max: { ...s.base.max, value: next },
-                            },
-                        }));
+                        updateScale(binding.token, (s) => {
+                            const ratio =
+                                s.base.max.value > 0 ? s.base.min.value / s.base.max.value : 1;
+                            return {
+                                ...s,
+                                base: {
+                                    min: { ...s.base.min, value: roundTo(next * ratio) },
+                                    max: { ...s.base.max, value: next },
+                                },
+                            };
+                        });
                     }}
                     aria-label={`${label} base`}
                 />
@@ -132,9 +131,4 @@ export function ExponentialScaleControl({ binding }: ExponentialScaleControlProp
             <ScalePreview extension={scale} />
         </div>
     );
-}
-
-function roundTo(value: number, precision: number): number {
-    const factor = 10 ** precision;
-    return Math.round(value * factor) / factor;
 }

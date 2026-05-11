@@ -31,6 +31,7 @@ export { convertConfigToUnoRules, clearMatchCache } from "./shared/uno-rules.js"
 export { formatCSSVarName } from "./shared/format-css-var-name.js";
 export { createVariableNameResolver } from "./shared/resolve-variable-name.js";
 export { kebabCase } from "./shared/case.js";
+export { roundTo } from "./shared/round.js";
 
 export { calculateScale } from "./shared/scale/calculator.js";
 export type { GeneratedStep } from "./shared/scale/calculator.js";

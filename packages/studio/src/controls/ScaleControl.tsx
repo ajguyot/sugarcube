@@ -11,15 +11,6 @@ type ScaleControlProps = {
     binding: ScaleBinding;
 };
 
-/**
- * Dispatches between editing models for a `type: "scale"` binding:
- *
- * - Scale extension at the bound path → extension controls (interactive).
- *   The extension's `mode` selects which control panel: exponential or
- *   multipliers.
- * - Otherwise → bulk sliders + per-step inputs stacked together, both
- *   editing the scale's concrete tokens.
- */
 export function ScaleControl({ binding }: ScaleControlProps) {
     const parent = stripTrailingGlob(binding.token);
     const baseline = useBaseline();

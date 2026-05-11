@@ -6,11 +6,6 @@ type ScalePreviewProps = {
     extension: ScaleExtension;
 };
 
-/**
- * Read-only display of a scale extension's generated steps. Each row
- * shows a step name and its `clamp()` output, recomputed live from the
- * current scale parameters.
- */
 export function ScalePreview({ extension }: ScalePreviewProps) {
     const viewport = useBaseline().config.variables.transforms.fluid;
     const steps = calculateScale(extension);

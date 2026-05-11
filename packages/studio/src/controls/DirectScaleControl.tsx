@@ -7,14 +7,6 @@ type DirectScaleControlProps = {
     binding: ScaleBinding;
 };
 
-/**
- * Edits a hand-written scale (concrete fluid tokens, no scale extension)
- * with two sliders: a base value that anchors the scale, and a spread
- * factor that compresses or amplifies the gaps between steps.
- *
- * Capture (slider min/max) is derived from the live baseline per render —
- * an external file edit shifts the slider range to track the new disk values.
- */
 export function DirectScaleControl({ binding }: DirectScaleControlProps) {
     const meta = useScaleState((state) => state.bindings[binding.token]);
     const edit = useScaleState((state) => state.edits[binding.token]);

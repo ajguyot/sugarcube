@@ -1,4 +1,4 @@
-import type { MultiplierScaleConfig, ScaleBinding } from "@sugarcube-sh/core/client";
+import { type MultiplierScaleConfig, type ScaleBinding, roundTo } from "@sugarcube-sh/core/client";
 import { useBaseline, useScaleState } from "../store/hooks";
 import { selectEffectiveScale } from "../store/scale-state";
 import { ScalePreview } from "./ScalePreview";
@@ -10,11 +10,6 @@ type MultipliersScaleControlProps = {
 
 type PairsMode = "none" | "adjacent" | "custom";
 
-/**
- * Controls for a multipliers scale extension: base size, editable list
- * of named multipliers, and a pairs toggle (none / adjacent / custom).
- * Edits route through `scaleState.updateScale`; preview updates live.
- */
 export function MultipliersScaleControl({ binding }: MultipliersScaleControlProps) {
     const meta = useScaleState((s) => s.bindings[binding.token]);
     const edit = useScaleState((s) => s.edits[binding.token]);
@@ -24,7 +19,7 @@ export function MultipliersScaleControl({ binding }: MultipliersScaleControlProp
     if (!meta || meta.kind !== "scale") return null;
     const effective = selectEffectiveScale(baseline, edit, meta.parentPath);
     if (!effective || effective.mode !== "multipliers") return null;
-    const scale = effective as MultiplierScaleConfig;
+    const scale: MultiplierScaleConfig = effective;
     const label = labelForBinding(binding);
 
     const pairsMode = pairsToMode(scale.pairs);
@@ -43,13 +38,17 @@ export function MultipliersScaleControl({ binding }: MultipliersScaleControlProp
                     onChange={(e) => {
                         const next = Number(e.target.value);
                         if (!Number.isFinite(next)) return;
-                        updateScale(binding.token, (s) => ({
-                            ...s,
-                            base: {
-                                min: { ...s.base.min, value: roundTo(next * 0.875, 4) },
-                                max: { ...s.base.max, value: next },
-                            },
-                        }));
+                        updateScale(binding.token, (s) => {
+                            const ratio =
+                                s.base.max.value > 0 ? s.base.min.value / s.base.max.value : 1;
+                            return {
+                                ...s,
+                                base: {
+                                    min: { ...s.base.min, value: roundTo(next * ratio) },
+                                    max: { ...s.base.max, value: next },
+                                },
+                            };
+                        });
                     }}
                     aria-label={`${label} base`}
                 />
@@ -118,9 +117,4 @@ function pairsToMode(pairs: MultiplierScaleConfig["pairs"]): PairsMode {
     if (pairs === "adjacent") return "adjacent";
     if (Array.isArray(pairs)) return "custom";
     return "none";
-}
-
-function roundTo(value: number, precision: number): number {
-    const factor = 10 ** precision;
-    return Math.round(value * factor) / factor;
 }

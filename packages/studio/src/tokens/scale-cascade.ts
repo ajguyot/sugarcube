@@ -1,4 +1,4 @@
-import { type ResolvedTokens, isResolvedToken } from "@sugarcube-sh/core/client";
+import { type ResolvedTokens, isResolvedToken, roundTo } from "@sugarcube-sh/core/client";
 import type { PathIndex } from "./path-index";
 
 type Dim = { value: number; unit: string };
@@ -117,17 +117,6 @@ export function captureLinkedScale(
     return { defaults };
 }
 
-/**
- * Round to 4 decimals — the Utopia convention for fluid scales. Kills
- * binary-float drift (`4.799999999999999` → `4.8`), preserves clean
- * designer values, and is sub-pixel invisible (≈0.0016px at the 4th
- * decimal rem). Worth staying consistent with when Model B lands.
- */
-function cleanFloat(value: number, precision = 4): number {
-    const factor = 10 ** precision;
-    return Math.round(value * factor) / factor;
-}
-
 function buildFluidDimensionToken(
     existing: ResolvedTokens[string] | undefined,
     min: Dim,
@@ -202,8 +191,8 @@ export function applyScaleToResolved(
         } else {
             const adjMax = 1 + (step.maxMultiplier - 1) * spread;
             const adjMin = 1 + (step.minMultiplier - 1) * spread;
-            newMax = { value: cleanFloat(userBase * adjMax), unit: step.unit };
-            newMin = { value: cleanFloat(newBaseMin * adjMin), unit: step.unit };
+            newMax = { value: roundTo(userBase * adjMax), unit: step.unit };
+            newMin = { value: roundTo(newBaseMin * adjMin), unit: step.unit };
         }
 
         const entries = pathIndex.entriesFor(step.path).filter((e) => e.context === context);
