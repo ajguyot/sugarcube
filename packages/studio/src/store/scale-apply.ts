@@ -90,11 +90,6 @@ export function applyScaleEdits(
     return next;
 }
 
-/**
- * Materialise a scale extension into per-step dimension tokens (with
- * fluid extension), merged into the resolved map. Turns abstract scale
- * parameters into concrete tokens.
- */
 export function materializeScale(
     resolved: ResolvedTokens,
     scale: ScaleExtension,

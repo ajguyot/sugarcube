@@ -1,15 +1,3 @@
-/**
- * Compute the diff between the studio's current resolved tokens and the
- * live baseline. Used by the diff panel and by the save flow to figure
- * out what to write to disk / submit as a PR.
- *
- * Two kinds of entries:
- *   - leaf entries — per-token value changes
- *   - scale entries — group-level scale-extension edits, which suppress
- *     the per-leaf diffs they own (so commits write the scale extension
- *     back, not the N generated leaves)
- */
-
 import {
     type ResolvedToken,
     type ResolvedTokens,
@@ -21,8 +9,6 @@ import type { ScaleBindingMeta, ScaleEdit } from "../store/scale-types";
 import type { PathIndex } from "./path-index";
 import type { SlimToken, TokenDiffEntry, TokenSnapshot } from "./types";
 
-// Reduce a resolved token to the DTCG-author shape.
-// Resolved tokens have a bunch of extra metadata we don't want or need here.
 function slimToken({ $value, $extensions }: ResolvedToken): SlimToken {
     if ($extensions && Object.keys($extensions).length > 0) {
         return { $value, $extensions };
@@ -30,25 +16,6 @@ function slimToken({ $value, $extensions }: ResolvedToken): SlimToken {
     return { $value };
 }
 
-/**
- * Diff edited tokens against the baseline snapshot.
- *
- * Core resolves each permutation independently — a dark-mode project
- * has two separate entries per path in the resolved map. A raw diff
- * would show identical changes twice. This groups by (path, from, to)
- * into one entry per distinct change, with `contexts` listing the
- * affected perms — or empty when every perm shares the change
- * (shorthand for "applies everywhere").
- *
- * Example: editing `space.md` from 16px → 20px in both light and dark
- * produces one entry with `contexts: []`, not two.
- *
- * Scale-extension-driven groups: when a scale extension at a group
- * path has changed, all its leaf tokens have changed too. We emit a
- * single group-level diff for the extension and suppress the per-leaf
- * diffs that descend from it, so commits write the extension back
- * rather than N individual leaves.
- */
 export function computeDiff(
     resolved: ResolvedTokens,
     baseline: TokenSnapshot,

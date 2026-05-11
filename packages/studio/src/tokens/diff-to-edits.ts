@@ -11,13 +11,6 @@ export type FileEdits = {
     edits: TokenEdit[];
 };
 
-/**
- * Convert a list of diff entries into the file-edit shape expected by
- * the studio submit API. Most entries are leaf-token changes (`$value`
- * and optionally a fluid extension). Group-level entries (e.g. an edited
- * scale extension on a parent group) have no `$value` — only the
- * relevant `$extensions` slot.
- */
 export function diffToFileEdits(entries: readonly TokenDiffEntry[]): FileEdits[] {
     const byFile = new Map<string, TokenEdit[]>();
 
