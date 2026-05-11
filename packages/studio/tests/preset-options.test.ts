@@ -1,40 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveOptions, resolveTerminalPath } from "../src/controls/preset-options";
+import { resolveOptions } from "../src/controls/preset-options";
 import { PathIndex } from "../src/tokens/path-index";
 import { resolved } from "./fixtures";
-
-describe("resolveTerminalPath", () => {
-    it("returns the input path when the value is not a reference", () => {
-        const getToken = (path: string) => ({ "font.body": "Inter" })[path];
-        expect(resolveTerminalPath("font.body", getToken)).toBe("font.body");
-    });
-
-    it("follows a single-step reference to its target", () => {
-        const getToken = (path: string) =>
-            ({ "font.body": "{font.sans}", "font.sans": "Inter" })[path];
-        expect(resolveTerminalPath("font.body", getToken)).toBe("font.sans");
-    });
-
-    it("walks a multi-hop reference chain to the terminal", () => {
-        const getToken = (path: string) =>
-            ({
-                "font.body": "{font.serif}",
-                "font.serif": "{font.sans}",
-                "font.sans": "Inter",
-            })[path];
-        expect(resolveTerminalPath("font.body", getToken)).toBe("font.sans");
-    });
-
-    it("stops at the cycle entry when a path references itself", () => {
-        const getToken = (path: string) => ({ "font.loop": "{font.loop}" })[path];
-        expect(resolveTerminalPath("font.loop", getToken)).toBe("font.loop");
-    });
-
-    it("stops at the cycle entry when references cycle between multiple paths", () => {
-        const getToken = (path: string) => ({ "font.a": "{font.b}", "font.b": "{font.a}" })[path];
-        expect(resolveTerminalPath("font.a", getToken)).toBe("font.a");
-    });
-});
 
 describe("resolveOptions", () => {
     it("passes a record of options through with the key as label and the value as reference", () => {

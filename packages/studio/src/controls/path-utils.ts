@@ -37,3 +37,15 @@ export function labelForBinding(binding: PanelBinding): string {
     const path = binding.type === "palette-swap" ? binding.family : binding.token;
     return lastSegment(path);
 }
+
+export function resolveTerminalPath(path: string, getToken: (path: string) => unknown): string {
+    const seen = new Set<string>();
+    let current = path;
+    while (true) {
+        if (seen.has(current)) return current;
+        seen.add(current);
+        const next = unwrapRef(getToken(current));
+        if (!next) return current;
+        current = next;
+    }
+}
