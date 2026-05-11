@@ -1,6 +1,6 @@
 import type { ScaleLinkedBinding } from "@sugarcube-sh/core/client";
 import { useScaleState } from "../store/hooks";
-import { labelForBinding } from "./resolver";
+import { labelForBinding } from "./path-utils";
 
 type ScaleLinkedControlProps = {
     binding: ScaleLinkedBinding;

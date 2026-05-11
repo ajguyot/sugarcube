@@ -2,7 +2,7 @@ import type { ExponentialScaleConfig, ScaleBinding } from "@sugarcube-sh/core/cl
 import { useBaseline, useScaleState } from "../store/hooks";
 import { selectEffectiveScale } from "../store/scale-state";
 import { ScalePreview } from "./ScalePreview";
-import { labelForBinding } from "./resolver";
+import { labelForBinding } from "./path-utils";
 
 type ExponentialScaleControlProps = {
     binding: ScaleBinding;

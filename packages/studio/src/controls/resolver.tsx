@@ -3,7 +3,6 @@ import type {
     ColorScaleConfig,
     PanelBinding,
     PanelSection,
-    PresetBinding,
 } from "@sugarcube-sh/core/client";
 import type { ReactNode } from "react";
 import type { PathIndex } from "../tokens/path-index";
@@ -12,7 +11,6 @@ import { PaletteSwapControl } from "./PaletteSwapControl";
 import { PresetControl } from "./PresetControl";
 import { ScaleControl } from "./ScaleControl";
 import { ScaleLinkedControl } from "./ScaleLinkedControl";
-import { lastSegment } from "./path-utils";
 
 export type ControlContext = {
     colorScale: ColorScaleConfig | undefined;
@@ -40,10 +38,6 @@ function renderBinding(binding: PanelBinding, ctx: ControlContext, key: number):
     }
 }
 
-/**
- * Expand a glob token to one control per matching path.
- * Non-glob bindings render as-is.
- */
 function renderExpanded<B extends { token: string }>(
     binding: B,
     ctx: ControlContext,
@@ -90,15 +84,4 @@ function renderPaletteSwap(
             colorScale={ctx.colorScale}
         />
     );
-}
-
-/**
- * Derive the row label for a binding — uses `label` when provided,
- * otherwise falls back to the last path segment of `token` (or `family`
- * for palette-swap).
- */
-export function labelForBinding(binding: PanelBinding): string {
-    if (binding.label) return binding.label;
-    const path = binding.type === "palette-swap" ? binding.family : binding.token;
-    return lastSegment(path);
 }

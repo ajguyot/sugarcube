@@ -1,7 +1,7 @@
 import type { ScaleBinding } from "@sugarcube-sh/core/client";
 import { useBaseline, useCurrentContext, usePathIndex, useScaleState } from "../store/hooks";
 import { DEFAULT_SPREAD, selectCapture } from "../store/scale-selectors";
-import { labelForBinding } from "./resolver";
+import { labelForBinding } from "./path-utils";
 
 type DirectScaleControlProps = {
     binding: ScaleBinding;

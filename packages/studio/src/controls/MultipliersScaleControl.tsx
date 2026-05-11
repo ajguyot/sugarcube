@@ -2,7 +2,7 @@ import type { MultiplierScaleConfig, ScaleBinding } from "@sugarcube-sh/core/cli
 import { useBaseline, useScaleState } from "../store/hooks";
 import { selectEffectiveScale } from "../store/scale-state";
 import { ScalePreview } from "./ScalePreview";
-import { labelForBinding } from "./resolver";
+import { labelForBinding } from "./path-utils";
 
 type MultipliersScaleControlProps = {
     binding: ScaleBinding;

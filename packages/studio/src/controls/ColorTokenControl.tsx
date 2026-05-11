@@ -10,9 +10,8 @@ import {
 } from "../store/hooks";
 import type { PathIndex } from "../tokens/path-index";
 import { TokenRow } from "./TokenRow";
-import { joinTokenPath, unwrapRef, wrapRef } from "./path-utils";
+import { joinTokenPath, labelForBinding, unwrapRef, wrapRef } from "./path-utils";
 import { ColorGrid, type GridOption } from "./pickers/ColorGrid";
-import { labelForBinding } from "./resolver";
 
 type ColorTokenControlProps = {
     binding: ColorBinding;
