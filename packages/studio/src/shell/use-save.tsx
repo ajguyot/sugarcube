@@ -13,7 +13,7 @@ type SaveStatus =
 
 const SAVED_PIP_DURATION_MS = 2000;
 
-export type UseSaveResult = {
+type UseSaveResult = {
     saving: boolean;
     label: string;
     feedback: ReactNode;
@@ -40,13 +40,11 @@ export function useSave(diff: readonly TokenDiffEntry[]): UseSaveResult {
         setStatus({ kind: "saving" });
         const result = await host.save(buildSaveBundle(diffRef.current));
         setStatus(result);
-        // PR-submitted state sticks around so the user can click through
-        // to the PR; persisted state auto-dismisses via the effect above.
     }, [host]);
 
     return {
         saving: status.kind === "saving",
-        label: renderLabel(status, host.capabilities.saveLabel),
+        label: status.kind === "saving" ? "Saving…" : host.capabilities.saveLabel,
         feedback: renderFeedback(status),
         onSave,
         reset,
@@ -60,29 +58,30 @@ function buildSaveBundle(diff: readonly TokenDiffEntry[]): SaveBundle {
     return { title, description: "", files };
 }
 
-function renderLabel(status: SaveStatus, defaultLabel: string): string {
-    switch (status.kind) {
-        case "saving":
-            return "Saving…";
-        case "persisted":
-            return "Saved";
-        case "pr-submitted":
-            return `PR #${status.number} opened`;
-        case "failed":
-        case "idle":
-            return defaultLabel;
-    }
-}
-
 function renderFeedback(status: SaveStatus): ReactNode {
     switch (status.kind) {
-        case "failed":
-            return <span role="alert">{status.error}</span>;
+        case "persisted":
+            return (
+                <output className="save-pip">
+                    <span>Saved</span>
+                </output>
+            );
         case "pr-submitted":
             return (
-                <a href={status.url} target="_blank" rel="noopener noreferrer">
+                <a
+                    className="save-pr-link"
+                    href={status.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
                     View PR #{status.number}
                 </a>
+            );
+        case "failed":
+            return (
+                <span className="save-error" role="alert">
+                    {status.error}
+                </span>
             );
         default:
             return null;
