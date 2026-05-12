@@ -31,7 +31,8 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
-        "@sugarcube-sh/core": "workspace:*"
+        "@sugarcube-sh/core": "workspace:*",
+        "@sugarcube-sh/studio-protocol": "workspace:*"
     },
     "devDependencies": {
         "@radix-ui/react-popover": "^1.1.14",

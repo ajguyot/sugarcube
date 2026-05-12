@@ -1,12 +1,3 @@
-/**
- * Init-time fetching for the DevTools Host. Subscribes to both shared
- * states and waits for them to populate before resolving — first-connect
- * can race ahead of the host registering its initial values.
- *
- * Returns the raw building blocks (`InitData`); the Host adapter wraps
- * them in the public Host shape.
- */
-
 import type { InternalConfig, ResolvedTokens, TokenTree } from "@sugarcube-sh/core/client";
 import {
     type DiskSharedState,
@@ -17,12 +8,7 @@ import {
     getWorkingSharedState,
 } from "../providers/rpc-client";
 
-/**
- * Max time to wait for both shared states to populate. Covers the edge
- * case where RPC connects but shared state never arrives. The kit
- * doesn't expose a connection health signal, so a timeout is the best
- * we can do.
- */
+// Max wait for both shared states to populate — the kit has no connection-health signal.
 const INIT_TIMEOUT_MS = 10_000;
 
 export type InitData = {

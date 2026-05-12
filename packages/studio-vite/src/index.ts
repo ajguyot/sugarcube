@@ -1,6 +1,7 @@
 /// <reference types="@vitejs/devtools-kit" />
 
 import type { InternalConfig, ResolvedTokens, TokenTree } from "@sugarcube-sh/core";
+import { STUDIO_RPC } from "@sugarcube-sh/studio-protocol";
 import { clientPath } from "@sugarcube-sh/studio/client";
 import type { SugarcubePluginContext } from "@sugarcube-sh/vite";
 import { defineRpcFunction } from "@vitejs/devtools-kit";
@@ -8,15 +9,8 @@ import type { Plugin } from "vite";
 
 declare module "@vitejs/devtools-kit" {
     interface DevToolsRpcSharedStates {
-        /** Working copy — mutated by client edits, watched by host to re-run pipeline. */
-        "sugarcube:studio:working": { resolved: ResolvedTokens };
-        /**
-         * Canonical disk state — updated only by `scCtx.onReload`. Carries
-         * `trees` (recipes live on group nodes, not in resolved) and
-         * `config` (so client picks up live edits to the user's config
-         * file — e.g. panel structure).
-         */
-        "sugarcube:studio:disk": {
+        [STUDIO_RPC.SHARED_STATE_WORKING]: { resolved: ResolvedTokens };
+        [STUDIO_RPC.SHARED_STATE_DISK]: {
             config: InternalConfig;
             trees: TokenTree[];
             resolved: ResolvedTokens;
@@ -65,7 +59,7 @@ export default function sugarcubeStudio(): Plugin {
                     return;
                 }
 
-                const working = await ctx.rpc.sharedState.get("sugarcube:studio:working", {
+                const working = await ctx.rpc.sharedState.get(STUDIO_RPC.SHARED_STATE_WORKING, {
                     initialValue: { resolved: scCtx.resolved },
                 });
 
@@ -74,7 +68,7 @@ export default function sugarcubeStudio(): Plugin {
                 // `config.variables.permutations` in-place on every pipeline
                 // run. Handing over the live reference would freeze it and
                 // crash subsequent reloads.
-                const disk = await ctx.rpc.sharedState.get("sugarcube:studio:disk", {
+                const disk = await ctx.rpc.sharedState.get(STUDIO_RPC.SHARED_STATE_DISK, {
                     initialValue: {
                         config: structuredClone(scCtx.config),
                         trees: scCtx.trees,
@@ -114,13 +108,10 @@ export default function sugarcubeStudio(): Plugin {
 
                 ctx.rpc.register(
                     defineRpcFunction({
-                        name: "studio:save",
+                        name: STUDIO_RPC.SAVE,
                         type: "action",
                         setup: () => ({
                             handler: async (bundle) => {
-                                // The SPA computed the diff and packaged it
-                                // — apply the file edits as-given. What the
-                                // diff panel shows is what gets written.
                                 for (const { path, edits } of bundle.files) {
                                     await scCtx.writeTokenEdits(path, edits);
                                 }
@@ -131,7 +122,7 @@ export default function sugarcubeStudio(): Plugin {
 
                 ctx.rpc.register(
                     defineRpcFunction({
-                        name: "studio:discard",
+                        name: STUDIO_RPC.DISCARD,
                         type: "action",
                         setup: () => ({
                             handler: async () => {

@@ -1,19 +1,18 @@
-/**
- * Runs the sugarcube pipeline in-browser whenever resolved tokens change,
- * writes the generated CSS into the store, and posts the result to the
- * parent window.
- */
-
 import {
     type ResolvedTokens,
     assignCSSNames,
     generateCSSVariables,
     groupByContext,
 } from "@sugarcube-sh/core/client";
+import { STUDIO_MESSAGE } from "@sugarcube-sh/studio-protocol";
 import type { TokenStoreAPI } from "../store/create-token-store";
 import type { TokenSnapshot } from "../tokens/types";
 
-export function attachEmbeddedPipeline(store: TokenStoreAPI, snapshot: TokenSnapshot): () => void {
+export function attachEmbeddedPipeline(
+    store: TokenStoreAPI,
+    snapshot: TokenSnapshot,
+    parentOrigin: string
+): () => void {
     let activeRun: AbortController | null = null;
 
     function schedule(resolved: ResolvedTokens) {
@@ -61,7 +60,10 @@ export function attachEmbeddedPipeline(store: TokenStoreAPI, snapshot: TokenSnap
 
     const unsubCSS = store.subscribe((state, prev) => {
         if (state.css === prev.css || state.css === null) return;
-        window.parent.postMessage({ type: "studio:css-update", css: state.css }, "*");
+        window.parent.postMessage(
+            { type: STUDIO_MESSAGE.CSS_UPDATE, css: state.css },
+            parentOrigin
+        );
     });
 
     return () => {

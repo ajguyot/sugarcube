@@ -47,8 +47,17 @@ export function StudioProvider({ source, children }: Props) {
     if (state.kind === "error") {
         return (
             <div className="studio-error">
-                <p>Failed to connect to the dev server.</p>
-                <p>Make sure your Vite dev server is running and try reloading.</p>
+                {source.mode === "devtools" ? (
+                    <>
+                        <p>Failed to connect to the dev server.</p>
+                        <p>Make sure your Vite dev server is running and try reloading.</p>
+                    </>
+                ) : (
+                    <>
+                        <p>Couldn't load the studio.</p>
+                        <p>Check the host page's console for postMessage / snapshot errors.</p>
+                    </>
+                )}
                 <details>
                     <summary>Details</summary>
                     <pre>{state.message}</pre>

@@ -24,6 +24,7 @@
     "dependencies": {
         "@sugarcube-sh/core": "workspace:*",
         "@sugarcube-sh/studio": "workspace:*",
+        "@sugarcube-sh/studio-protocol": "workspace:*",
         "@sugarcube-sh/vite": "workspace:*",
         "@vitejs/devtools-kit": "^0.1.13"
     },

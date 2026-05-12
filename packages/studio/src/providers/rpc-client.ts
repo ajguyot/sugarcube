@@ -1,4 +1,5 @@
 import type { InternalConfig, ResolvedTokens, TokenTree } from "@sugarcube-sh/core/client";
+import { STUDIO_RPC } from "@sugarcube-sh/studio-protocol";
 import { getDevToolsRpcClient } from "@vitejs/devtools-kit/client";
 import type { SharedState } from "@vitejs/devtools-kit/utils/shared-state";
 import type { SaveBundle } from "../host/types";
@@ -22,20 +23,20 @@ async function getRpc() {
 
 export async function getWorkingSharedState(): Promise<WorkingSharedStateHandle> {
     const client = await getRpc();
-    return client.sharedState.get("sugarcube:studio:working");
+    return client.sharedState.get(STUDIO_RPC.SHARED_STATE_WORKING);
 }
 
 export async function getDiskSharedState(): Promise<DiskSharedStateHandle> {
     const client = await getRpc();
-    return client.sharedState.get("sugarcube:studio:disk");
+    return client.sharedState.get(STUDIO_RPC.SHARED_STATE_DISK);
 }
 
 export async function rpcSave(bundle: SaveBundle): Promise<void> {
     const client = await getRpc();
-    await client.call("studio:save", bundle);
+    await client.call(STUDIO_RPC.SAVE, bundle);
 }
 
 export async function rpcDiscard(): Promise<void> {
     const client = await getRpc();
-    await client.call("studio:discard");
+    await client.call(STUDIO_RPC.DISCARD);
 }

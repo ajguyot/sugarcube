@@ -1,9 +1,9 @@
 {
-    "name": "@sugarcube-sh/studio-embed",
+    "name": "@sugarcube-sh/studio-protocol",
     "version": "0.0.1",
     "type": "module",
     "private": true,
-    "description": "<sugarcube-studio> web component for embedding Studio in any page",
+    "description": "Protocol constants shared between the studio SPA, the studio-vite plugin, and the studio-embed web component.",
     "license": "MIT",
     "author": {
         "name": "Mark Tomlinson",
@@ -12,21 +12,14 @@
     },
     "exports": {
         ".": {
-            "types": "./dist/web-component.d.mts",
-            "import": "./dist/web-component.mjs"
-        },
-        "./path": {
-            "types": "./dist/path.d.mts",
-            "import": "./dist/path.mjs"
+            "types": "./dist/index.d.mts",
+            "import": "./dist/index.mjs"
         }
     },
     "scripts": {
         "build": "pkgroll --minify",
         "dev": "pkgroll --watch",
         "type-check": "tsc --noEmit"
-    },
-    "dependencies": {
-        "@sugarcube-sh/studio-protocol": "workspace:*"
     },
     "devDependencies": {
         "pkgroll": "^2.26.0",

@@ -1,21 +1,4 @@
-/**
- * Embedded mode Host — for the studio running inside a `<sugarcube-studio>`
- * web component iframe on a staging or preview deployment.
- *
- * Waits for the host page's `studio:init` postMessage, then returns a
- * Host whose baseline is the received snapshot. There is no working
- * channel — edits stay in the SPA's stores until save, and the in-browser
- * pipeline (attached via `attach()`) generates CSS for the host page.
- *
- * Save round-trips via postMessage: posts `studio:save` with a request id
- * and waits for `studio:save-result` carrying the matching id and the
- * PR result (or error). The id correlation prevents one save's response
- * from accidentally resolving another's promise.
- *
- * Discard is a no-op at the host level: there's no host-side state to
- * reset. The SPA clears its own edit stores in parallel.
- */
-
+import { STUDIO_MESSAGE } from "@sugarcube-sh/studio-protocol";
 import { createStore } from "zustand/vanilla";
 import type { TokenSnapshot } from "../tokens/types";
 import { attachEmbeddedPipeline } from "./embedded-pipeline";
@@ -31,9 +14,10 @@ export function createEmbeddedHost(signal: AbortSignal): Promise<Host> {
         }
 
         function listener(event: MessageEvent) {
+            if (event.source !== window.parent) return;
             const data = event.data;
             if (!data || typeof data !== "object") return;
-            if (data.type !== "studio:init" || !isTokenSnapshot(data.snapshot)) return;
+            if (data.type !== STUDIO_MESSAGE.INIT || !isTokenSnapshot(data.snapshot)) return;
             cleanup();
 
             if (signal.aborted) {
@@ -43,12 +27,13 @@ export function createEmbeddedHost(signal: AbortSignal): Promise<Host> {
 
             const snapshot: TokenSnapshot = data.snapshot;
             const baseline = createStore<TokenSnapshot>(() => snapshot);
+            const parentOrigin = event.origin;
 
             resolve({
                 baseline,
                 working: undefined,
-                attach: (store) => attachEmbeddedPipeline(store, snapshot),
-                save: embeddedSave,
+                attach: (store) => attachEmbeddedPipeline(store, snapshot, parentOrigin),
+                save: (bundle) => embeddedSave(bundle, parentOrigin),
                 discard: async () => {},
                 capabilities: {
                     saveLabel: "Submit as PR",
@@ -71,21 +56,22 @@ export function createEmbeddedHost(signal: AbortSignal): Promise<Host> {
         window.addEventListener("message", listener);
         signal.addEventListener("abort", onAbort);
 
-        // TODO.
-        window.parent.postMessage({ type: "studio:ready" }, "*");
+        // Bootstrap to '*' — we don't know the parent's origin yet; we'll capture it from init.
+        window.parent.postMessage({ type: STUDIO_MESSAGE.READY }, "*");
     });
 }
 
 let nextSaveRequestId = 0;
 
-function embeddedSave(bundle: SaveBundle): Promise<SaveResult> {
+function embeddedSave(bundle: SaveBundle, parentOrigin: string): Promise<SaveResult> {
     return new Promise((resolve) => {
         const requestId = String(++nextSaveRequestId);
 
         function handler(event: MessageEvent) {
+            if (event.source !== window.parent) return;
             const data = event.data;
             if (!data || typeof data !== "object") return;
-            if (data.type !== "studio:save-result") return;
+            if (data.type !== STUDIO_MESSAGE.SAVE_RESULT) return;
             if (data.requestId !== requestId) return;
             cleanup();
 
@@ -111,7 +97,7 @@ function embeddedSave(bundle: SaveBundle): Promise<SaveResult> {
         window.addEventListener("message", handler);
         window.parent.postMessage(
             {
-                type: "studio:save",
+                type: STUDIO_MESSAGE.SAVE,
                 requestId,
                 payload: {
                     title: bundle.title,
@@ -119,12 +105,12 @@ function embeddedSave(bundle: SaveBundle): Promise<SaveResult> {
                     files: bundle.files,
                 },
             },
-            "*"
+            parentOrigin
         );
     });
 }
 
-function isTokenSnapshot(value: unknown): value is TokenSnapshot {
+export function isTokenSnapshot(value: unknown): value is TokenSnapshot {
     if (!value || typeof value !== "object") return false;
     const obj = value as Record<string, unknown>;
     return "config" in obj && "trees" in obj && "resolved" in obj;

@@ -1,15 +1,3 @@
-/**
- * Host interface — the boundary between the studio SPA and the world it's
- * embedded in. The studio talks to one Host; the Host owns the canonical
- * baseline, accepts working-copy edits where applicable, and handles
- * Save/Discard intent with mode-specific persistence.
- *
- * Two implementations today: DevToolsHost (Vite plugin, RPC, shared
- * state, write to disk) and EmbeddedHost (web component iframe,
- * postMessage, submit-PR via host callback).
- *
- */
-
 import type { ResolvedTokens } from "@sugarcube-sh/core/client";
 import type { StoreApi } from "zustand";
 import type { TokenStoreAPI } from "../store/create-token-store";
