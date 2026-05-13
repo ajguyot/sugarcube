@@ -1,13 +1,14 @@
 import {
     type ResolvedToken,
     type ResolvedTokens,
+    SUGARCUBE_NAMESPACE,
     isResolvedToken,
 } from "@sugarcube-sh/core/client";
+import { selectOriginalScale } from "../store/scale-state";
+import type { ScaleBindingMeta, ScaleEdit } from "../store/scale-types";
 import type { PathIndex } from "./path-index";
-import type { SlimToken, TokenDiffEntry } from "./types";
+import type { SlimToken, TokenDiffEntry, TokenSnapshot } from "./types";
 
-// Reduce a resolved token to the DTCG-author shape.
-// Resolved tokens have a bunch of extra metadata we don't want or need here.
 function slimToken({ $value, $extensions }: ResolvedToken): SlimToken {
     if ($extensions && Object.keys($extensions).length > 0) {
         return { $value, $extensions };
@@ -15,33 +16,26 @@ function slimToken({ $value, $extensions }: ResolvedToken): SlimToken {
     return { $value };
 }
 
-/**
- * Diff edited tokens against the baseline snapshot.
- *
- * Core resolves each permutation independently — a dark-mode project
- * has two separate entries per path in the resolved map. A raw diff
- * would show identical changes twice. This groups by (path, from, to)
- * into one entry per distinct change, with `contexts` listing the
- * affected perms — or empty when every perm shares the change
- * (shorthand for "applies everywhere").
- *
- * Example: editing `space.md` from 16px → 20px in both light and dark
- * produces one entry with `contexts: []`, not two.
- */
 export function computeDiff(
     resolved: ResolvedTokens,
-    snapshotResolved: ResolvedTokens,
-    pathIndex: PathIndex
+    baseline: TokenSnapshot,
+    pathIndex: PathIndex,
+    edits?: Record<string, ScaleEdit>,
+    bindings?: Record<string, ScaleBindingMeta>
 ): TokenDiffEntry[] {
+    const scaleOwnedPrefixes = collectScaleOwnedPrefixes(bindings);
+
     const groups = new Map<string, TokenDiffEntry>();
     const sigsPerPath = new Map<string, Set<string>>();
     const totals = new Map<string, number>();
 
     for (const [path, indexEntries] of pathIndex.entries()) {
+        if (isOwnedByScale(path, scaleOwnedPrefixes)) continue;
+
         totals.set(path, indexEntries.length);
         for (const { context, key } of indexEntries) {
             const current = resolved[key];
-            const original = snapshotResolved[key];
+            const original = baseline.resolved[key];
             if (!isResolvedToken(current) || !isResolvedToken(original)) continue;
 
             const from = slimToken(original);
@@ -50,7 +44,7 @@ export function computeDiff(
             const toKey = JSON.stringify(to);
             if (fromKey === toKey) continue;
 
-            const sig = `${path}\u0000${fromKey}\u0000${toKey}`;
+            const sig = `${path} ${fromKey} ${toKey}`;
             const existing = groups.get(sig);
             if (existing) {
                 existing.contexts.push(context);
@@ -80,5 +74,57 @@ export function computeDiff(
         }
     }
 
-    return [...groups.values()];
+    const leafEntries = [...groups.values()];
+    const scaleEntries = computeScaleDiffs(baseline, edits, bindings);
+    return [...scaleEntries, ...leafEntries];
+}
+
+function collectScaleOwnedPrefixes(
+    bindings: Record<string, ScaleBindingMeta> | undefined
+): string[] {
+    if (!bindings) return [];
+    return Object.values(bindings)
+        .filter((meta) => meta.kind === "scale")
+        .map((meta) => meta.parentPath);
+}
+
+function isOwnedByScale(path: string, prefixes: string[]): boolean {
+    for (const prefix of prefixes) {
+        if (path === prefix || path.startsWith(`${prefix}.`)) return true;
+    }
+    return false;
+}
+
+function computeScaleDiffs(
+    baseline: TokenSnapshot,
+    edits: Record<string, ScaleEdit> | undefined,
+    bindings: Record<string, ScaleBindingMeta> | undefined
+): TokenDiffEntry[] {
+    if (!edits || !bindings) return [];
+    const entries: TokenDiffEntry[] = [];
+
+    for (const [token, edit] of Object.entries(edits)) {
+        if (edit.kind !== "scale") continue;
+        const meta = bindings[token];
+        if (!meta || meta.kind !== "scale") continue;
+
+        const original = selectOriginalScale(baseline, meta.parentPath);
+        const fromKey = JSON.stringify(original);
+        const toKey = JSON.stringify(edit.scale);
+        if (fromKey === toKey) continue;
+
+        entries.push({
+            path: meta.parentPath,
+            sourcePath: meta.sourcePath,
+            contexts: [],
+            from: {
+                $extensions: { [SUGARCUBE_NAMESPACE]: { scale: original } },
+            },
+            to: {
+                $extensions: { [SUGARCUBE_NAMESPACE]: { scale: edit.scale } },
+            },
+        });
+    }
+
+    return entries;
 }

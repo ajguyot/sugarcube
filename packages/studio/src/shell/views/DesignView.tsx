@@ -22,10 +22,11 @@ export function DesignView() {
 
     return (
         <div>
-            {sections.map((section) => {
-                const headingId = `design-section-${section.title.toLowerCase().replace(/\s+/g, "-")}`;
+            {sections.map((section, i) => {
+                const slug = section.title.toLowerCase().replace(/\s+/g, "-");
+                const headingId = `design-section-${slug}-${i}`;
                 return (
-                    <section key={section.title} aria-labelledby={headingId}>
+                    <section key={headingId} aria-labelledby={headingId}>
                         <details open>
                             <summary>
                                 <h2 id={headingId}>{section.title}</h2>

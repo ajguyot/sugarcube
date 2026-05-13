@@ -1,9 +1,7 @@
 import { type KeyboardEvent, useCallback, useRef, useState } from "react";
 
 export type GridOption = {
-    /** Token path to emit on selection (e.g. "color.neutral.500"). */
     path: string;
-    /** Resolved CSS color for the swatch. */
     color: string;
     label: string;
 };
@@ -11,30 +9,15 @@ export type GridOption = {
 type GridCell = GridOption | null;
 
 type Props = {
-    /** Column headers (palette names + optional extra column for white/black). */
     columns: readonly string[];
     rows: readonly string[];
-    /** Row-major matrix of cells: `cells[row][col]`. Null entries are empty. */
     cells: GridCell[][];
     currentPath: string;
-    /** Fires on navigation (live apply) and on click. */
     onSelect: (path: string) => void;
-    /** Called when user confirms selection (Enter or click). Closes the popover. */
     onCommit: () => void;
-    /** Called when user cancels. Consumer should revert and close. */
     onCancel: () => void;
 };
 
-/**
- * 2D color picker grid with ARIA grid semantics.
- *
- * - Columns = palettes, rows = steps.
- * - Single tab stop; arrows navigate within the grid.
- * - Arrow keys stop at row/column edges (no wrapping).
- * - Navigation fires `onSelect` immediately so the page updates live.
- * - Enter / click → commit (close popover).
- * - Escape → cancel (revert to initial, close popover).
- */
 export function ColorGrid({
     columns,
     rows,
@@ -47,7 +30,6 @@ export function ColorGrid({
     const gridRef = useRef<HTMLDivElement>(null);
     const colCount = columns.length;
 
-    // Capture the value the grid opened with — used by Escape to revert.
     const [initialPath] = useState(currentPath);
 
     const focusCell = useCallback(
@@ -75,10 +57,6 @@ export function ColorGrid({
         return null;
     }, [cells]);
 
-    /**
-     * Find the nearest non-empty cell in a direction from (row, col).
-     * Skips over null cells so navigation feels natural with sparse grids.
-     */
     const findNext = useCallback(
         (row: number, col: number, dr: number, dc: number): [number, number] | null => {
             let r = row + dr;

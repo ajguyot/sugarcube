@@ -1,24 +1,20 @@
 import type { ScaleLinkedBinding } from "@sugarcube-sh/core/client";
 import { useScaleState } from "../store/hooks";
-import { labelForBinding } from "./resolver";
+import { labelForBinding } from "./path-utils";
 
 type ScaleLinkedControlProps = {
     binding: ScaleLinkedBinding;
 };
 
-/**
- * Toggle to opt a token family into following another scale's transform
- * (e.g. containers tracking the type scale).
- *
- * How this relates to the scale extension API is still TBD — the spec
- * doesn't cover linked/follower scales yet.
- */
+// TODO: linked/follower scales aren't covered by the scale extension spec yet.
 export function ScaleLinkedControl({ binding }: ScaleLinkedControlProps) {
-    const slot = useScaleState((state) => state.links[binding.token]);
+    const linkMeta = useScaleState((state) => state.linkBindings[binding.token]);
+    const linkEdit = useScaleState((state) => state.links[binding.token]);
     const setLinkEnabled = useScaleState((state) => state.setLinkEnabled);
 
-    if (!slot) return null;
+    if (!linkMeta) return null;
 
+    const enabled = linkEdit?.enabled ?? true;
     const label = labelForBinding(binding);
     const inputId = `studio-scale-linked-${binding.token.replace(/\./g, "-")}`;
 
@@ -31,7 +27,7 @@ export function ScaleLinkedControl({ binding }: ScaleLinkedControlProps) {
                 className="scale-linked-toggle"
                 id={inputId}
                 type="checkbox"
-                checked={slot.enabled}
+                checked={enabled}
                 onChange={(e) => setLinkEnabled(binding.token, e.target.checked)}
                 aria-label={label}
             />

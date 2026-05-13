@@ -1,17 +1,4 @@
-/**
- * <sugarcube-studio> web component.
- *
- * Framework-agnostic wrapper that embeds Studio in an iframe docked
- * to the right side of the page. Handles:
- *
- * - Rendering the iframe
- * - Show/hide toggle
- * - Listening for postMessage from the iframe (token updates)
- * - Running the sugarcube pipeline and injecting CSS into the host document
- *
- * Usage:
- *   <sugarcube-studio src="/__studio/"></sugarcube-studio>
- */
+import { STUDIO_MESSAGE } from "@sugarcube-sh/studio-protocol";
 
 const DEFAULT_SUBMIT_URL = "https://studio.sugarcube.sh/submit-pr";
 const STUDIO_WIDTH = "22rem";
@@ -151,35 +138,42 @@ class SugarcubeStudio extends HTMLElement {
         if (!data || typeof data !== "object") return;
 
         switch (data.type) {
-            case "studio:ready":
+            case STUDIO_MESSAGE.READY:
                 this.sendSnapshot();
                 break;
 
-            case "studio:css-update":
+            case STUDIO_MESSAGE.CSS_UPDATE:
                 if (this.styleTag && typeof data.css === "string") {
                     this.styleTag.textContent = data.css;
                 }
                 break;
 
-            case "studio:save":
-                this.handleSave(data.payload);
+            case STUDIO_MESSAGE.SAVE:
+                this.handleSave(data.payload, data.requestId);
                 break;
         }
     };
 
     private reply(data: Record<string, unknown>) {
-        this.iframe?.contentWindow?.postMessage({ type: "studio:save-result", ...data }, "*");
+        this.iframe?.contentWindow?.postMessage({ type: STUDIO_MESSAGE.SAVE_RESULT, ...data }, "*");
     }
 
-    /** Submit via `onSave` if set, otherwise POST to `submit-url` (defaults to the hosted API). */
-    private async handleSave(payload: SavePayload) {
+    /**
+     * Submit via `onSave` if set, otherwise POST to `submit-url`. The
+     * `requestId` (when provided by the SPA) is echoed back on the
+     * reply so the caller can correlate concurrent saves.
+     */
+    private async handleSave(payload: SavePayload, requestId?: string) {
         try {
             const result = this.onSave
                 ? await this.onSave(payload)
                 : await this.submitToAPI(payload);
-            this.reply({ number: result.number, url: result.url });
+            this.reply({ requestId, number: result.number, url: result.url });
         } catch (err) {
-            this.reply({ error: err instanceof Error ? err.message : "Submission failed" });
+            this.reply({
+                requestId,
+                error: err instanceof Error ? err.message : "Submission failed",
+            });
         }
     }
 
@@ -203,7 +197,7 @@ class SugarcubeStudio extends HTMLElement {
             const res = await fetch(snapshotURL);
             const snapshot = await res.json();
 
-            this.iframe?.contentWindow?.postMessage({ type: "studio:init", snapshot }, "*");
+            this.iframe?.contentWindow?.postMessage({ type: STUDIO_MESSAGE.INIT, snapshot }, "*");
         } catch (err) {
             console.error("[sugarcube-studio] Failed to load snapshot:", err);
         }

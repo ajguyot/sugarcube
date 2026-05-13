@@ -4,14 +4,13 @@ import type {
     MultiplierScaleConfig,
     ScaleExtension,
 } from "../../types/extensions.js";
+import { roundTo } from "../round.js";
 
 export type GeneratedStep = {
     name: string;
     min: Dimension;
     max: Dimension;
 };
-
-const ROUND_PRECISION = 4;
 
 export function calculateScale(config: ScaleExtension): GeneratedStep[] {
     return config.mode === "exponential"
@@ -27,11 +26,11 @@ function calculateExponentialScale(config: ExponentialScaleConfig): GeneratedSte
         result.push({
             name: String(i),
             min: {
-                value: roundTo(base.min.value * ratio.min ** i, ROUND_PRECISION),
+                value: roundTo(base.min.value * ratio.min ** i),
                 unit: base.min.unit,
             },
             max: {
-                value: roundTo(base.max.value * ratio.max ** i, ROUND_PRECISION),
+                value: roundTo(base.max.value * ratio.max ** i),
                 unit: base.max.unit,
             },
         });
@@ -48,11 +47,11 @@ function calculateMultiplierScale(config: MultiplierScaleConfig): GeneratedStep[
         result.push({
             name,
             min: {
-                value: roundTo(base.min.value * multiplier, ROUND_PRECISION),
+                value: roundTo(base.min.value * multiplier),
                 unit: base.min.unit,
             },
             max: {
-                value: roundTo(base.max.value * multiplier, ROUND_PRECISION),
+                value: roundTo(base.max.value * multiplier),
                 unit: base.max.unit,
             },
         });
@@ -66,11 +65,11 @@ function calculateMultiplierScale(config: MultiplierScaleConfig): GeneratedStep[
         result.push({
             name: `${fromName}-${toName}`,
             min: {
-                value: roundTo(base.min.value * fromMultiplier, ROUND_PRECISION),
+                value: roundTo(base.min.value * fromMultiplier),
                 unit: base.min.unit,
             },
             max: {
-                value: roundTo(base.max.value * toMultiplier, ROUND_PRECISION),
+                value: roundTo(base.max.value * toMultiplier),
                 unit: base.max.unit,
             },
         });
@@ -99,9 +98,4 @@ function resolvePairList(
         const dash = spec.indexOf("-");
         return [spec.slice(0, dash), spec.slice(dash + 1)] as [string, string];
     });
-}
-
-function roundTo(value: number, precision: number): number {
-    const factor = 10 ** precision;
-    return Math.round(value * factor) / factor;
 }

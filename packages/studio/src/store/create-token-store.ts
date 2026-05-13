@@ -1,7 +1,8 @@
 import type { ResolvedTokens } from "@sugarcube-sh/core/client";
 import { type StoreApi, createStore } from "zustand";
-import { PathIndex } from "../tokens/path-index";
-import type { TokenReader, TokenSnapshot, TokenUpdate } from "../tokens/types";
+import type { Host } from "../host/types";
+import { type PathIndexAccessor, createPathIndexAccessor } from "../tokens/path-index";
+import type { TokenReader, TokenUpdate } from "../tokens/types";
 
 export type TokenStoreState = {
     resolved: ResolvedTokens;
@@ -10,12 +11,6 @@ export type TokenStoreState = {
     error: string | null;
     lastRunMs: number | null;
 
-    /**
-     * The permutation context the user is currently editing (e.g.
-     * `"perm:0"`). Reads and writes via `useToken` scope to this so
-     * edits don't bleed across modes/brands. Map back to structured
-     * input via `snapshot.config.variables.permutations[i]`.
-     */
     currentContext: string;
     setCurrentContext: (ctx: string) => void;
 
@@ -23,21 +18,34 @@ export type TokenStoreState = {
     setToken: (path: string, value: unknown, context?: string) => void;
     setTokens: (updates: TokenUpdate[]) => void;
     resetToken: (path: string) => void;
-    resetAll: () => void;
+    discard: () => Promise<void>;
 };
 
 export type TokenStoreAPI = StoreApi<TokenStoreState>;
 
-/** Create an independent zustand store + PathIndex pair from a snapshot. No singletons. */
-export function createTokenStore(snapshot: TokenSnapshot): {
+export type TokenStoreHandle = {
     store: TokenStoreAPI;
-    pathIndex: PathIndex;
-} {
-    const pathIndex = new PathIndex(snapshot.resolved);
-    const initialContext = pathIndex.contexts[0] ?? "default";
+    getPathIndex: PathIndexAccessor;
+    writeResolved: (next: ResolvedTokens) => void;
+    activate: () => () => void;
+};
+
+export function createTokenStore(host: Host): TokenStoreHandle {
+    const baselineSnap = host.baseline.getState();
+    const getPathIndex = createPathIndexAccessor(() => host.baseline.getState().resolved);
+    const initialContext = getPathIndex().contexts[0] ?? "default";
+    const initialResolved = host.working ? host.working.get() : baselineSnap.resolved;
+
+    const writeResolved = (next: ResolvedTokens) => {
+        if (host.working) {
+            host.working.push(next);
+        } else {
+            store.setState({ resolved: next });
+        }
+    };
 
     const store = createStore<TokenStoreState>((set, get) => ({
-        resolved: snapshot.resolved,
+        resolved: initialResolved,
         css: null,
         isComputing: false,
         error: null,
@@ -46,37 +54,45 @@ export function createTokenStore(snapshot: TokenSnapshot): {
         currentContext: initialContext,
         setCurrentContext: (ctx) => set({ currentContext: ctx }),
 
-        getToken: (path, context) => pathIndex.readValue(get().resolved, path, context),
+        getToken: (path, context) => getPathIndex().readValue(get().resolved, path, context),
 
         setToken: (path, value, context) => {
-            set((state) => ({
-                resolved: pathIndex.setValue(state.resolved, path, value, context),
-            }));
+            const next = getPathIndex().setValue(get().resolved, path, value, context);
+            writeResolved(next);
         },
 
         setTokens: (updates) => {
-            set((state) => {
-                let next = state.resolved;
-                for (const { path, value, context } of updates) {
-                    next = pathIndex.setValue(next, path, value, context);
-                }
-                return { resolved: next };
-            });
+            const index = getPathIndex();
+            let next = get().resolved;
+            for (const { path, value, context } of updates) {
+                next = index.setValue(next, path, value, context);
+            }
+            writeResolved(next);
         },
 
         resetToken: (path) => {
+            const index = getPathIndex();
             const ctx = get().currentContext;
-            const original = pathIndex.readValue(snapshot.resolved, path, ctx);
+            const original = index.readValue(baselineSnap.resolved, path, ctx);
             if (original === undefined) return;
-            set((state) => ({
-                resolved: pathIndex.setValue(state.resolved, path, original, ctx),
-            }));
+            const next = index.setValue(get().resolved, path, original, ctx);
+            writeResolved(next);
         },
 
-        resetAll: () => {
-            set({ resolved: snapshot.resolved });
+        discard: async () => {
+            await host.discard();
+            if (!host.working) {
+                set({ resolved: baselineSnap.resolved });
+            }
         },
     }));
 
-    return { store, pathIndex };
+    const activate = (): (() => void) => {
+        const unsubWorking = host.working?.subscribe((resolved) => {
+            store.setState({ resolved });
+        });
+        return () => unsubWorking?.();
+    };
+
+    return { store, getPathIndex, writeResolved, activate };
 }

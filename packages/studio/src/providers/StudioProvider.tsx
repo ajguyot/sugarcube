@@ -1,27 +1,80 @@
-import type { ReactNode } from "react";
-import { DevToolsTokenProvider } from "./DevToolsTokenProvider";
-import { EmbeddedTokenProvider } from "./EmbeddedTokenProvider";
+import { type ReactNode, useEffect, useState } from "react";
+import { createDevToolsHost } from "../host/devtools-host";
+import { createEmbeddedHost } from "../host/embedded-host";
+import { HostProvider } from "../host/host-provider";
+import type { Host } from "../host/types";
+import { TokenStoreProvider } from "./TokenStoreProvider";
 import type { TokenSource } from "./token-source";
-
-export { useStudioConfig, useStudioMode } from "../store/hooks";
 
 type Props = {
     source: TokenSource;
     children: ReactNode;
 };
 
-/**
- * Top-level Studio provider. Routes to the correct mode-specific provider
- * based on how Studio was launched:
- *
- *   - devtools:  Vite DevTools dock. Server owns the pipeline, edits via RPC.
- *   - embedded:  Web component iframe. Browser owns the pipeline, edits via postMessage.
- */
+type HostState =
+    | { kind: "loading" }
+    | { kind: "error"; message: string }
+    | { kind: "ready"; host: Host };
+
 export function StudioProvider({ source, children }: Props) {
-    switch (source.mode) {
-        case "devtools":
-            return <DevToolsTokenProvider>{children}</DevToolsTokenProvider>;
-        case "embedded":
-            return <EmbeddedTokenProvider>{children}</EmbeddedTokenProvider>;
+    const [state, setState] = useState<HostState>({ kind: "loading" });
+
+    useEffect(() => {
+        setState({ kind: "loading" });
+        const controller = new AbortController();
+
+        async function init() {
+            try {
+                const host =
+                    source.mode === "devtools"
+                        ? await createDevToolsHost(controller.signal)
+                        : await createEmbeddedHost(controller.signal);
+
+                if (!controller.signal.aborted) setState({ kind: "ready", host });
+            } catch (err) {
+                if (err instanceof DOMException && err.name === "AbortError") return;
+                setState({
+                    kind: "error",
+                    message: err instanceof Error ? err.message : "Failed to connect",
+                });
+            }
+        }
+
+        init();
+        return () => controller.abort();
+    }, [source.mode]);
+
+    if (state.kind === "error") {
+        return (
+            <div className="studio-error">
+                {source.mode === "devtools" ? (
+                    <>
+                        <p>Failed to connect to the dev server.</p>
+                        <p>Make sure your Vite dev server is running and try reloading.</p>
+                    </>
+                ) : (
+                    <>
+                        <p>Couldn't load the studio.</p>
+                        <p>Check the host page's console for postMessage / snapshot errors.</p>
+                    </>
+                )}
+                <details>
+                    <summary>Details</summary>
+                    <pre>{state.message}</pre>
+                </details>
+            </div>
+        );
     }
+
+    if (state.kind === "loading") {
+        return (
+            <div>{source.mode === "devtools" ? "Loading Studio..." : "Waiting for host..."}</div>
+        );
+    }
+
+    return (
+        <HostProvider host={state.host}>
+            <TokenStoreProvider>{children}</TokenStoreProvider>
+        </HostProvider>
+    );
 }

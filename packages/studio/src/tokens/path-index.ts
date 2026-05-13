@@ -1,17 +1,9 @@
 import { type ResolvedTokens, isResolvedToken } from "@sugarcube-sh/core/client";
+import { sameKeySet } from "./same-key-set";
 import type { PathIndexEntry } from "./types";
 
-/**
- * Inverse lookup from a token's semantic `$path` to all its permutation
- * variants in the resolved map.
- *
- * A token defined once per permutation (light, dark, brand-A…) shows up
- * as multiple entries in the flat resolved map — same `$path`, different
- * internal keys. This class groups them so callers can work by path and
- * narrow to a specific context when needed.
- */
 export class PathIndex {
-    private index: Map<string, PathIndexEntry[]>;
+    private readonly index: Map<string, PathIndexEntry[]>;
 
     constructor(resolved: ResolvedTokens) {
         this.index = PathIndex.build(resolved);
@@ -33,6 +25,14 @@ export class PathIndex {
         return index;
     }
 
+    resolvedKeys(): IterableIterator<string> {
+        const keys: string[] = [];
+        for (const entries of this.index.values()) {
+            for (const { key } of entries) keys.push(key);
+        }
+        return keys[Symbol.iterator]();
+    }
+
     readValue(resolved: ResolvedTokens, barePath: string, context?: string): unknown {
         const entries = this.index.get(barePath);
         if (!entries || entries.length === 0) return undefined;
@@ -45,7 +45,6 @@ export class PathIndex {
         return token.$value;
     }
 
-    // Immutably update a token's $value across all permutations (or a specific context).
     setValue(
         resolved: ResolvedTokens,
         barePath: string,
@@ -69,7 +68,6 @@ export class PathIndex {
         return { ...resolved, ...updates };
     }
 
-    // In snapshot order.
     get contexts(): readonly string[] {
         const seen = new Set<string>();
         for (const entries of this.index.values()) {
@@ -94,7 +92,6 @@ export class PathIndex {
         return this.index.entries();
     }
 
-    // `*` matches exactly one path segment; `**` is not supported.
     matching(pattern: string): readonly string[] {
         const patternSegs = pattern.split(".");
         const matches: string[] = [];
@@ -114,7 +111,6 @@ export class PathIndex {
         return matches;
     }
 
-    // Find all token paths under a prefix (any depth).
     under(prefix: string): readonly string[] {
         const needle = `${prefix}.`;
         const matches: string[] = [];
@@ -123,4 +119,20 @@ export class PathIndex {
         }
         return matches;
     }
+}
+
+export type PathIndexAccessor = () => PathIndex;
+
+export function createPathIndexAccessor(getSource: () => ResolvedTokens): PathIndexAccessor {
+    let cached = new PathIndex(getSource());
+    let builtFrom: ResolvedTokens = getSource();
+    return () => {
+        const current = getSource();
+        if (current === builtFrom) return cached;
+        builtFrom = current;
+        if (!sameKeySet(cached.resolvedKeys(), Object.keys(current))) {
+            cached = new PathIndex(current);
+        }
+        return cached;
+    };
 }

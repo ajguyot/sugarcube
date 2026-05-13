@@ -1,34 +1,48 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { useHost } from "../host/host-provider";
+import { createDiffStore } from "../store/create-diff-store";
 import { createTokenStore } from "../store/create-token-store";
 import { StudioContext } from "../store/hooks";
 import { createScaleState } from "../store/scale-state";
-import type { TokenSnapshot } from "../tokens/types";
 
-type Props = {
-    snapshot: TokenSnapshot;
-    mode: "devtools" | "embedded";
-    children: ReactNode;
-};
+export function TokenStoreProvider({ children }: { children: ReactNode }) {
+    const host = useHost();
 
-export function TokenStoreProvider({ snapshot, mode, children }: Props) {
-    const [ctx] = useState(() => {
-        const { store, pathIndex } = createTokenStore(snapshot);
-        const scaleState = createScaleState(
-            snapshot.config.studio?.panel ?? [],
-            snapshot,
-            pathIndex,
-            store
+    const [{ ctx, activate }] = useState(() => {
+        const initialSnapshot = host.baseline.getState();
+        const tokens = createTokenStore(host);
+        const panel = initialSnapshot.config.studio?.panel ?? [];
+        const scale = createScaleState(
+            panel,
+            initialSnapshot,
+            tokens.getPathIndex,
+            tokens.store,
+            host.baseline,
+            tokens.writeResolved
         );
+        const diff = createDiffStore(host, tokens.store, scale.store, tokens.getPathIndex);
+
+        const activate = (): (() => void) => {
+            const teardowns = [tokens.activate(), scale.activate(), diff.activate()];
+            return () => {
+                for (const teardown of teardowns) teardown();
+            };
+        };
 
         return {
-            mode,
-            store,
-            pathIndex,
-            snapshot,
-            scaleState,
-            studioConfig: snapshot.config.studio,
+            ctx: {
+                store: tokens.store,
+                getPathIndex: tokens.getPathIndex,
+                scaleState: scale.store,
+                diffStore: diff.store,
+            },
+            activate,
         };
     });
+
+    useEffect(() => host.attach?.(ctx.store), [host, ctx.store]);
+
+    useEffect(() => activate(), [activate]);
 
     return <StudioContext.Provider value={ctx}>{children}</StudioContext.Provider>;
 }

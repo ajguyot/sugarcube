@@ -1,12 +1,18 @@
-import type { ResolvedTokens } from "@sugarcube-sh/core/client";
+import type { InternalConfig, ResolvedTokens, TokenTree } from "@sugarcube-sh/core/client";
+import { STUDIO_RPC } from "@sugarcube-sh/studio-protocol";
 import { getDevToolsRpcClient } from "@vitejs/devtools-kit/client";
 import type { SharedState } from "@vitejs/devtools-kit/utils/shared-state";
+import type { SaveBundle } from "../host/types";
 
-export type SharedResolvedState = {
+export type WorkingSharedState = { resolved: ResolvedTokens };
+export type DiskSharedState = {
+    config: InternalConfig;
+    trees: TokenTree[];
     resolved: ResolvedTokens;
 };
 
-export type SharedStateHandle = SharedState<SharedResolvedState>;
+export type WorkingSharedStateHandle = SharedState<WorkingSharedState>;
+export type DiskSharedStateHandle = SharedState<DiskSharedState>;
 
 let rpc: Awaited<ReturnType<typeof getDevToolsRpcClient>> | null = null;
 
@@ -15,26 +21,22 @@ async function getRpc() {
     return rpc;
 }
 
-// Fetch the static config + trees from the server.
-export async function rpcGetTokens() {
+export async function getWorkingSharedState(): Promise<WorkingSharedStateHandle> {
     const client = await getRpc();
-    return client.call("studio:get-tokens");
+    return client.sharedState.get(STUDIO_RPC.SHARED_STATE_WORKING);
 }
 
-// Subscribe to the live resolved-tokens state.
-export async function getResolvedSharedState(): Promise<SharedStateHandle> {
+export async function getDiskSharedState(): Promise<DiskSharedStateHandle> {
     const client = await getRpc();
-    return client.sharedState.get("sugarcube:studio:resolved");
+    return client.sharedState.get(STUDIO_RPC.SHARED_STATE_DISK);
 }
 
-// Write staged edits from shared state to disk.
-export async function rpcSave(): Promise<void> {
+export async function rpcSave(bundle: SaveBundle): Promise<void> {
     const client = await getRpc();
-    await client.call("studio:save");
+    await client.call(STUDIO_RPC.SAVE, bundle);
 }
 
-// Discard staged edits and reload from disk.
 export async function rpcDiscard(): Promise<void> {
     const client = await getRpc();
-    await client.call("studio:discard");
+    await client.call(STUDIO_RPC.DISCARD);
 }
